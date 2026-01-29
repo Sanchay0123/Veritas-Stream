@@ -1,28 +1,14 @@
-# --- Backend & Web Framework ---
-django>=5.0
-django-environ         # For managing .env and 1TB paths
-djangorestframework    # For the API layer
+# Veritas Stream - Core Architecture
+# Current Phase: Secure Ingestion & RSA Signing
 
-# --- Cybersecurity & Forensics ---
-cryptography>=42.0.0   # For RSA signatures
-pycryptodome           # Support for advanced crypto ops
-python-dotenv          # Environment variables
-python-magic
+# Web Framework
+Django==5.0.1
 
+# Configuration & Security
+django-environ==0.11.2
+cryptography==42.0.0
 
-# --- AI & Image Processing ---
-opencv-python          # Core image/video processing
-numpy                  # Math for pixel arrays
-# Run the specific pip command below for these:
-opencv-python-headless
-# torch (installed via: pip install torch --index-url https://download.pytorch.org/whl/cu121)
-# For the RTX 3050, you'll install torch via a specific URL usually, 
-
-# but we list it here for the environment check:
-torch
-torchvision
-torchaudio
-
-# --- Utilities ---
-requests               # External API calls
-python-magic           # For file type verification (MIME)
+# Future AI Dependencies (Commented out until next phase)
+# numpy
+# opencv-python-headless
+# torch --index-url https://download.pytorch.org/whl/cpu

@@ -77,3 +77,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Internal project URLs
 ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
+
+
+# The absolute path to the directory where files are saved
+MEDIA_ROOT = os.path.join(BASE_DIR, 'storage')
+
+# The URL that serves the media files (for development only)
+MEDIA_URL = '/media/'

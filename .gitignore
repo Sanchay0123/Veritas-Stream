@@ -17,3 +17,4 @@ db.sqlite3
 # The Vault Keys (CRITICAL)
 *.pem
 .veritas_keys/
+storage/

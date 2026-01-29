@@ -1,5 +1,29 @@
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    <input type="file" name="media_file">
-    <button type="submit">Scan for Deepfakes</button>
-</form>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Evidence - Veritas Stream</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #2c3e50; color: white; }
+        .upload-card { background: #34495e; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; }
+        .btn { background: #e74c3c; color: white; border: none; padding: 10px 20px; font-size: 1rem; border-radius: 5px; cursor: pointer; margin-top: 15px; }
+        .btn:hover { background: #c0392b; }
+        /* Style the Django Form Errors */
+        .errorlist { color: #e74c3c; list-style: none; padding: 0; font-weight: bold; }
+        input[type="file"] { margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="upload-card">
+        <h1>Veritas Stream</h1>
+        <p>Secure Deepfake Detection Pipeline</p>
+        
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            {{ form.as_p }}
+            
+            <button type="submit" class="btn">Scan Evidence</button>
+        </form>
+    </div>
+</body>
+</html>
