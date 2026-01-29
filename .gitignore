@@ -1,0 +1,19 @@
+# Python Basics
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment (NEVER upload this)
+venv/
+.venv/
+
+# Environment Variables (SECRETS)
+.env
+.env.local
+
+# Database (We don't upload the live DB)
+db.sqlite3
+
+# The Vault Keys (CRITICAL)
+*.pem
+.veritas_keys/

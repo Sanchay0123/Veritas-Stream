@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Forensic Report - Veritas Stream</title>
+    <style>
+        body { font-family: sans-serif; padding: 2rem; background: #f4f4f9; }
+        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+        .success { color: #2ecc71; }
+        .exists { color: #f39c12; }
+        .hash { font-family: monospace; background: #eee; padding: 4px; border-radius: 4px; word-break: break-all; }
+        .btn { display: inline-block; margin-top: 20px; padding: 10px 20px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; }
+        .btn:hover { background: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% if status == "Exists" %}
+            <h2 class="exists">⚠ File Already Analyzed</h2>
+            <p>We found an existing report for this file in our vault.</p>
+        {% else %}
+            <h2 class="success">✅ Analysis Complete</h2>
+            <p>New forensic report generated and notarized.</p>
+        {% endif %}
+
+        <hr>
+        <p><strong>File Name:</strong> {{ report.file_name }}</p>
+        <p><strong>SHA-256 Hash:</strong> <br><span class="hash">{{ report.sha256_hash }}</span></p>
+        <p><strong>AI Confidence:</strong> {{ report.ai_confidence_score }}</p>
+        <p><strong>Report ID:</strong> {{ report.id }}</p>
+        
+        <a href="{% url 'upload' %}" class="btn">Scan Another File</a>
+    </div>
+</body>
+</html>

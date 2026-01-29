@@ -1,0 +1,5 @@
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="file" name="media_file">
+    <button type="submit">Scan for Deepfakes</button>
+</form>
