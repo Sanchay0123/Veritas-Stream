@@ -1,13 +1,10 @@
-import hashlib
-import base64
 from django.shortcuts import render
 from django.conf import settings
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from django.core.files.storage import FileSystemStorage
 from .models import ForensicReport
-from .forms import ForensicUploadForm  # <--- Import the new form
+from .forms import ForensicUploadForm
+from .core import VeritasForensicEngine  # <--- The new Engine
 import os
-import shutil
 
 def upload_and_analyze(request):
     if request.method == 'POST':
@@ -16,65 +13,55 @@ def upload_and_analyze(request):
         if form.is_valid():
             uploaded_file = request.FILES['media_file']
             
-            # 1. Hashing
-            sha256 = hashlib.sha256()
-            for chunk in uploaded_file.chunks():
-                sha256.update(chunk)
-            file_hash = sha256.hexdigest()
+            # 1. Save to Quarantine (Temporary Holding Area)
+            # We use FileSystemStorage to safely save the file first so the Engine can read it
+            fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'quarantine'))
+            filename = fs.save(uploaded_file.name, uploaded_file)
+            quarantine_path = fs.path(filename)
 
-            # 2. Duplicate Check
-            existing_report = ForensicReport.objects.filter(sha256_hash=file_hash).first()
-            if existing_report:
-                return render(request, 'forensics/report.html', {
-                    'status': 'Exists',
-                    'report': existing_report
-                })
-
-            # --- CORRECTED: SAVE TO QUARANTINE ---
-            # We save to 'quarantine' first. This is the "Suspect" folder.
-            quarantine_path = os.path.join(settings.MEDIA_ROOT, 'quarantine', uploaded_file.name)
-            
-            os.makedirs(os.path.dirname(quarantine_path), exist_ok=True)
-
-            with open(quarantine_path, 'wb+') as destination:
-                for chunk in uploaded_file.chunks():
-                    destination.write(chunk)
-            
-            # NOTE: In the future, the Malware/AI check happens HERE.
-            # Only if it passes would we move it to 'vault'.
-            # For now, we leave it in quarantine as "Pending Analysis".
-            # -------------------------------------
-
-            # 3. RSA Signing (Sign the hash of the file in quarantine)
-            with open(settings.RSA_KEY_PATH, "rb") as key_file:
-                private_key = serialization.load_pem_private_key(
-                    key_file.read(), password=None
+            try:
+                # 2. Initialize the Engine
+                # We use your existing RSA_KEY_PATH setting
+                engine = VeritasForensicEngine(
+                    input_file_path=quarantine_path,
+                    private_key_path=settings.RSA_KEY_PATH 
                 )
 
-            signature = private_key.sign(
-                file_hash.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
-                ),
-                hashes.SHA256()
-            )
-            encoded_sig = base64.b64encode(signature).decode('utf-8')
+                # --- DUPLICATE CHECK OPTIMIZATION ---
+                # We can verify the hash before running the heavy AI analysis
+                file_hash = engine.get_file_hash()
+                existing_report = ForensicReport.objects.filter(sha256_hash=file_hash).first()
+                
+                if existing_report:
+                    # Clean up the quarantine file since we don't need it
+                    os.remove(quarantine_path)
+                    return render(request, 'forensics/report.html', {
+                        'status': 'Exists',
+                        'report': existing_report
+                    })
 
-            # 4. Save to DB 
-            # Note: We record the path as 'quarantine' for now.
-            report = ForensicReport.objects.create(
-                file_name=uploaded_file.name,
-                sha256_hash=file_hash,
-                vault_path=f"quarantine/{uploaded_file.name}", 
-                ai_confidence_score=0.98,
-                rsa_signature=encoded_sig
-            )
+                # 3. The "Big Red Button" -> Execute Pipeline (AI + Signing + Vaulting)
+                result = engine.execute_full_pipeline()
 
-            return render(request, 'forensics/report.html', {
-                'status': 'Success',
-                'report': report
-            })
+                # 4. Save the Result to the Database
+                report = ForensicReport.objects.create(
+                    file_name=uploaded_file.name,
+                    sha256_hash=result['hash'],
+                    vault_path=result['vault_location'], # Engine moved it to the Vault
+                    ai_confidence_score=result['analysis']['ai_confidence'],
+                    rsa_signature=result['signature']
+                )
+
+                return render(request, 'forensics/report.html', {
+                    'status': 'Success',
+                    'report': report,
+                    'metadata': result['analysis']
+                })
+
+            except Exception as e:
+                # If the pipeline crashes, show the error
+                return render(request, 'forensics/upload.html', {'form': form, 'error': str(e)})
+
     else:
         form = ForensicUploadForm()
 

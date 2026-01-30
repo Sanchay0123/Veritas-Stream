@@ -1,14 +1,18 @@
-# Veritas Stream - Core Architecture
-# Current Phase: Secure Ingestion & RSA Signing
+# Veritas Stream - Core Dependencies
+# Phase: AI Analysis Integration
 
-# Web Framework
 Django==5.0.1
-
-# Configuration & Security
 django-environ==0.11.2
 cryptography==42.0.0
 
-# Future AI Dependencies (Commented out until next phase)
-# numpy
-# opencv-python-headless
-# torch --index-url https://download.pytorch.org/whl/cpu
+# --- THE AI BRAIN ---
+# Numerical processing
+numpy
+
+# Computer Vision (The "Eyes")
+opencv-python-headless
+
+# Deep Learning (The "Brain")
+# We use the CPU version for lighter development environment
+torch --index-url https://download.pytorch.org/whl/cpu
+torchvision --index-url https://download.pytorch.org/whl/cpu
