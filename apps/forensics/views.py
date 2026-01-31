@@ -1,35 +1,35 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from .models import ForensicReport
-from .forms import ForensicUploadForm
-from .core import VeritasForensicEngine  # <--- The new Engine
-from .forms import MediaUploadForm
+# --- FIX: Only import the form that actually exists ---
+from .forms import ForensicUploadForm 
+from .core import VeritasForensicEngine
 import os
 
 def upload_and_analyze(request):
     if request.method == 'POST':
+        # Use the correct form class here
         form = ForensicUploadForm(request.POST, request.FILES)
         
         if form.is_valid():
-            uploaded_file = request.FILES['media_file']
+            # Check forms.py to see if the field is 'media_file' or 'file'
+            # Based on your previous snippet, it looked like 'media_file'
+            uploaded_file = request.FILES.get('media_file')
             
             # 1. Save to Quarantine (Temporary Holding Area)
-            # We use FileSystemStorage to safely save the file first so the Engine can read it
             fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'quarantine'))
             filename = fs.save(uploaded_file.name, uploaded_file)
             quarantine_path = fs.path(filename)
 
             try:
                 # 2. Initialize the Engine
-                # We use your existing RSA_KEY_PATH setting
                 engine = VeritasForensicEngine(
                     input_file_path=quarantine_path,
                     private_key_path=settings.RSA_KEY_PATH 
                 )
 
                 # --- DUPLICATE CHECK OPTIMIZATION ---
-                # We can verify the hash before running the heavy AI analysis
                 file_hash = engine.get_file_hash()
                 existing_report = ForensicReport.objects.filter(sha256_hash=file_hash).first()
                 
@@ -48,7 +48,7 @@ def upload_and_analyze(request):
                 report = ForensicReport.objects.create(
                     file_name=uploaded_file.name,
                     sha256_hash=result['hash'],
-                    vault_path=result['vault_location'], # Engine moved it to the Vault
+                    vault_path=result['vault_location'],
                     ai_confidence_score=result['analysis']['ai_confidence'],
                     rsa_signature=result['signature']
                 )
@@ -56,17 +56,15 @@ def upload_and_analyze(request):
                 return render(request, 'forensics/report.html', {
                     'status': 'Success',
                     'report': report,
-                    'metadata': result['analysis']
+                    # We don't need 'metadata' here as 'report' has the score
                 })
 
             except Exception as e:
-
-                # --- ADD THIS LINE TO SEE THE ERROR IN TERMINAL ---
                 print(f"❌ PIPELINE CRASHED: {str(e)}")
-                # If the pipeline crashes, show the error
                 return render(request, 'forensics/upload.html', {'form': form, 'error': str(e)})
 
     else:
+        # Use the correct form class here as well
         form = ForensicUploadForm()
 
     return render(request, 'forensics/upload.html', {'form': form})
