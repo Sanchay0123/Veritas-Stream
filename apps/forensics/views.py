@@ -4,6 +4,7 @@ from django.core.files.storage import FileSystemStorage
 from .models import ForensicReport
 from .forms import ForensicUploadForm
 from .core import VeritasForensicEngine  # <--- The new Engine
+from .forms import MediaUploadForm
 import os
 
 def upload_and_analyze(request):
@@ -59,6 +60,9 @@ def upload_and_analyze(request):
                 })
 
             except Exception as e:
+
+                # --- ADD THIS LINE TO SEE THE ERROR IN TERMINAL ---
+                print(f"❌ PIPELINE CRASHED: {str(e)}")
                 # If the pipeline crashes, show the error
                 return render(request, 'forensics/upload.html', {'form': form, 'error': str(e)})
 

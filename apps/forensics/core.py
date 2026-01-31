@@ -2,15 +2,15 @@ import os
 import cv2
 import hashlib
 import base64
+import shutil
 from datetime import datetime
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
 from django.conf import settings
 from django.utils import timezone
-from django.core.files.storage import default_storage
 
-# --- IMPORT THE BRAIN FROM THE OTHER FOLDER ---
+# Import the AI Brain
 from apps.analysis.core import DeepFakeDetector 
 
 class VeritasForensicEngine:
@@ -30,12 +30,10 @@ class VeritasForensicEngine:
 
     def analyze_media(self):
         """Step 2: AI Visual Analysis"""
-        # 1. Basic Metadata Extraction
         cap = cv2.VideoCapture(self.input_path)
         success, frame = cap.read()
         
         if not success:
-            # Fallback for images
             if self.input_path.lower().endswith(('.jpg', '.png', '.jpeg')):
                 img = cv2.imread(self.input_path)
                 if img is None:
@@ -53,7 +51,7 @@ class VeritasForensicEngine:
         
         cap.release()
 
-        # 2. Trigger the AI Brain
+        # Trigger the AI Brain
         detector = DeepFakeDetector()
         real_confidence = detector.analyze(self.input_path)
 
@@ -86,13 +84,29 @@ class VeritasForensicEngine:
         return base64.b64encode(signature).decode('utf-8')
 
     def archive_to_vault(self):
-        """Step 4: Secure Storage"""
+        """Step 4: Secure Storage on External Drive"""
+        # Safety Check for Vault Existence
+        vault_root = os.path.join(settings.MEDIA_ROOT, 'vault')
+        if not os.path.exists(vault_root):
+             os.makedirs(vault_root, exist_ok=True)
+
         date_path = self.timestamp.strftime('%Y/%m/%d')
-        vault_dir = os.path.join(settings.MEDIA_ROOT, 'vault', date_path)
+        vault_dir = os.path.join(vault_root, date_path)
         os.makedirs(vault_dir, exist_ok=True)
         
         vault_path = os.path.join(vault_dir, self.filename)
-        os.rename(self.input_path, vault_path)
+
+        # --- THE FORCE FIX ---
+        try:
+            print(f"📦 Moving evidence to: {vault_path}")
+            shutil.copyfile(self.input_path, vault_path)
+            os.remove(self.input_path)
+            print("✅ Move successful.")
+        except Exception as e:
+            print(f"⚠️ Vault Transfer Failed: {e}")
+            raise e
+        # ---------------------
+
         return vault_path
 
     def execute_full_pipeline(self):
