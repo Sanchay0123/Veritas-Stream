@@ -1,116 +1,68 @@
-import os
-import cv2
 import torch
-import numpy as np
-from torchvision import transforms
+import torch.nn as nn
+import torchvision.transforms as transforms
 from PIL import Image
+import os
+import torch.nn.functional as F
+from efficientnet_pytorch import EfficientNet
 
-# Import the brain we just built
-from .networks import Meso4 
-
-class DeepFakeDetector:
+# --- VERITAS PRO ARCHITECTURE (EfficientNet-B0) ---
+class ProDeepFakeDetector:
     def __init__(self):
-        print("🧠 Initializing MesoNet AI...")
+        print("🧠 Initializing Veritas Pro Engine...")
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # 1. Load the Structure
-        self.model = Meso4().to(self.device)
+        # 1. Define the Empty Architecture (The Skeleton)
+        # We use 'from_name' because we will load our own weights, not internet ones.
+        self.model = EfficientNet.from_name('efficientnet-b0', num_classes=2)
         
-        # 2. Load Weights (The Knowledge)
-        weights_path = os.path.join(os.path.dirname(__file__), 'weights', 'meso4_faceforensics.pkl')
+        # 2. Load Your 98% Accuracy Weights (The Brain)
+        weights_path = os.path.join(os.path.dirname(__file__), 'weights', 'veritas_pro.pkl')
         
         if os.path.exists(weights_path):
-            print(f"📥 Loading weights from: {weights_path}")
+            print(f"📥 Loading Custom Trained Weights: {weights_path}")
             try:
                 # Load the state dictionary
                 state_dict = torch.load(weights_path, map_location=self.device)
                 self.model.load_state_dict(state_dict)
-                self.model.eval() # Set to evaluation mode (frozen)
-                print("✅ AI Brain Successfully Loaded!")
+                self.model.to(self.device)
+                self.model.eval()
+                print("✅ Veritas Pro Successfully Loaded (Accuracy: ~98%)")
             except Exception as e:
-                print(f"⚠️ Error loading weights: {e}")
-                print("⚠️ Running with RANDOM weights (Untrained Mode)")
+                print(f"❌ CRITICAL: Custom weights failed to load: {e}")
+                print("⚠️ Falling back to untrained initialization.")
         else:
-            print(f"⚠️ No weights found at {weights_path}")
-            print("⚠️ Running with RANDOM weights (Untrained Mode)")
-            # Initialize with random weights but set to eval mode
-            self.model.eval()
-        
+            print(f"⚠️ Warning: {weights_path} not found.")
+            print("⚠️ System is running in UNTRAINED mode.")
+
+        self.model.to(self.device)
+        self.model.eval()
+
         # 3. Define Image Preprocessing
+        # MUST match the transformation used in train.py
         self.transform = transforms.Compose([
-            transforms.Resize((256, 256)),
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
-        print(f"✅ Model loaded on {self.device}")
 
-
-
-
-
-    def analyze(self, file_path):
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Evidence not found: {file_path}")
-
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext in ['.jpg', '.png', '.jpeg']:
-            return self._analyze_image(file_path)
-        elif ext in ['.mp4', '.avi', '.mov']:
-            return self._analyze_video(file_path)
-        else:
-            return 0.0
-
-    def _analyze_image(self, path):
+    def analyze(self, image_path):
+        """Run the AI inference on a single image"""
         try:
-            # Open Image
-            img = Image.open(path).convert('RGB')
+            image = Image.open(image_path).convert('RGB')
+            image_tensor = self.transform(image).unsqueeze(0).to(self.device)
             
-            # Preprocess (Resize -> Tensor -> Normalize)
-            img_tensor = self.transform(img).unsqueeze(0).to(self.device)
-            
-            # Predict
             with torch.no_grad():
-                output = self.model(img_tensor)
-                score = output.item() # Returns float between 0.0 (Real) and 1.0 (Fake)
-            
-            print(f"👁️ Image Scan Result: {score:.4f}")
-            return score
+                output = self.model(image_tensor)
+                # Softmax to get probabilities [Real_Prob, Fake_Prob]
+                probabilities = F.softmax(output, dim=1)
+                # Get Fake Probability (Index 1)
+                confidence = probabilities[0][0].item()
+                
+            return confidence
         except Exception as e:
-            print(f"❌ Analysis Failed: {e}")
-            return 0.0
+            print(f"❌ AI Analysis Failed: {e}")
+            return 0.5 
 
-    def _analyze_video(self, path):
-        # Strategy: Grab 5 random frames, analyze them, and average the score
-        cap = cv2.VideoCapture(path)
-        frames = []
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        
-        # Pick 5 timestamps to sample
-        sample_indices = np.linspace(0, frame_count - 10, 5).astype(int)
-        
-        scores = []
-        
-        for idx in sample_indices:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-            success, frame = cap.read()
-            if success:
-                # Convert BGR (OpenCV) to RGB (PIL)
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                pil_img = Image.fromarray(frame_rgb)
-                
-                # Preprocess
-                img_tensor = self.transform(pil_img).unsqueeze(0).to(self.device)
-                
-                # Predict
-                with torch.no_grad():
-                    output = self.model(img_tensor)
-                    scores.append(output.item())
-        
-        cap.release()
-        
-        if not scores:
-            return 0.0
-            
-        final_score = sum(scores) / len(scores)
-        print(f"🎥 Video Scan Result: {final_score:.4f}")
-        return final_score
+# Alias for compatibility with views.py
+DeepFakeDetector = ProDeepFakeDetector

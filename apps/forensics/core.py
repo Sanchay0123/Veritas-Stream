@@ -83,12 +83,21 @@ class VeritasForensicEngine:
         )
         return base64.b64encode(signature).decode('utf-8')
 
+
+
+
     def archive_to_vault(self):
         """Step 4: Secure Storage on External Drive"""
-        # Safety Check for Vault Existence
+        
+        # --- FIX: Robust Directory Creation ---
         vault_root = os.path.join(settings.MEDIA_ROOT, 'vault')
-        if not os.path.exists(vault_root):
-             os.makedirs(vault_root, exist_ok=True)
+        
+        # If it exists as a FILE, delete it so we can make a DIRECTORY
+        if os.path.exists(vault_root) and not os.path.isdir(vault_root):
+            os.remove(vault_root)
+            
+        os.makedirs(vault_root, exist_ok=True)
+        # --------------------------------------
 
         date_path = self.timestamp.strftime('%Y/%m/%d')
         vault_dir = os.path.join(vault_root, date_path)
@@ -96,18 +105,22 @@ class VeritasForensicEngine:
         
         vault_path = os.path.join(vault_dir, self.filename)
 
-        # --- THE FORCE FIX ---
+        # Use copyfile (Pure Data Copy) to avoid permission errors
         try:
-            print(f"📦 Moving evidence to: {vault_path}")
             shutil.copyfile(self.input_path, vault_path)
-            os.remove(self.input_path)
-            print("✅ Move successful.")
+            # Verify copy size before deleting
+            if os.path.getsize(vault_path) == os.path.getsize(self.input_path):
+                os.remove(self.input_path)
+            else:
+                raise Exception("Copy size mismatch")
         except Exception as e:
             print(f"⚠️ Vault Transfer Failed: {e}")
             raise e
-        # ---------------------
 
         return vault_path
+
+
+        
 
     def execute_full_pipeline(self):
         """The Big Red Button"""

@@ -18,3 +18,14 @@ db.sqlite3
 *.pem
 .veritas_keys/
 storage/
+
+# OS Junk (Storage Issue)
+.DS_Store
+Thumbs.db
+
+# --- Heavy Data (DO NOT UPLOAD) ---
+storage/
+apps/analysis/weights/
+*.pkl
+*.h5
+*.pth

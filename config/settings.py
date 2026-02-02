@@ -15,7 +15,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 # --- Security Settings ---
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-RSA_KEY_PATH = env('RSA_PRIVATE_KEY_PATH')
+RSA_KEY_PATH = os.path.expanduser('~/.veritas_keys/private_key.pem')
 
 # --- Storage Settings ---
 MEDIA_ROOT = os.path.join(BASE_DIR, 'storage')
