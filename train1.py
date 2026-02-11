@@ -6,50 +6,24 @@ from torch.utils.data import DataLoader, random_split
 import os
 from tqdm import tqdm
 from efficientnet_pytorch import EfficientNet
-from PIL import Image
-import random
-import io
 
 # --- CONFIGURATION ---
+# Points directly to the 'images' folder containing 'real' and 'fake'
 DATA_DIR = "storage/dataset/130k_faces/images" 
 BATCH_SIZE = 32
 LEARNING_RATE = 0.0001
-EPOCHS = 4  # Increased by 1 to let it learn the harder patterns
+EPOCHS = 3
 SAVE_PATH = "apps/analysis/weights/veritas_pro.pkl"
 
-# --- CUSTOM "WHATSAPP" SIMULATOR ---
-class RandomJPEGCompression(object):
-    """
-    Simulates Social Media compression (WhatsApp/Insta).
-    Randomly saves the image as a low-quality JPEG and reloads it.
-    """
-    def __init__(self, quality_range=(50, 90), p=0.5):
-        self.quality_range = quality_range
-        self.p = p
-
-    def __call__(self, img):
-        if random.random() < self.p:
-            # 1. Create a memory buffer
-            buffer = io.BytesIO()
-            # 2. Pick a random "bad" quality
-            q = random.randint(*self.quality_range)
-            # 3. Save to buffer as JPEG
-            img.save(buffer, format='JPEG', quality=q)
-            # 4. Reload from buffer
-            buffer.seek(0)
-            return Image.open(buffer).convert('RGB')
-        return img
-
 def train_model():
-    print("🧠 Training Veritas (Social Media Hardened Mode)...")
+    print("🧠 Training Veritas on 130k Modern Faces (Flux/SDXL)...")
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"⚙️ Hardware: {device}")
 
-    # 1. HARDENED TRANSFORM
-    # We add RandomJPEGCompression BEFORE converting to tensor.
+    # 1. High-Res Transform (256x256)
+    # No blurring, no degrading. We trust this high-quality data.
     train_transform = transforms.Compose([
-        RandomJPEGCompression(quality_range=(40, 80), p=0.5), # 50% chance to look like WhatsApp
         transforms.Resize((256, 256)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.ColorJitter(brightness=0.1, contrast=0.1),
@@ -65,28 +39,37 @@ def train_model():
 
     # 2. Load Data
     print(f"📂 Loading data from: {DATA_DIR}")
+    
     try:
         full_dataset = datasets.ImageFolder(DATA_DIR, transform=train_transform)
     except FileNotFoundError:
-        print("❌ ERROR: Data not found.")
+        print("❌ ERROR: Could not find folder. Did you run setup_dataset.py?")
         return
 
     # 3. Check Classes
-    print(f"✅ Classes: {full_dataset.classes}")
-    # Expected: ['fake', 'real']
+    # Expected: ['fake', 'real'] -> fake=0, real=1
+    classes = full_dataset.classes
+    print(f"✅ Classes Found: {classes}")
+    if classes[0] != 'fake':
+        print("⚠️ WARNING: Class order is unusual! Check your folder names.")
+        # If 'fake' is not 0, the logic in core.py will need flipping.
+        # But alphabetically, 'f' < 'r', so it should be fine.
 
-    # 4. Auto-Split
+    # 4. Auto-Split (80% Train, 20% Val)
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_data, val_data = random_split(full_dataset, [train_size, val_size])
     
-    # Update validation transform
+    # Apply validation transform
     val_data.dataset.transform = val_transform 
     
+    print(f"   Training Images: {len(train_data)}")
+    print(f"   Validation Images: {len(val_data)}")
+
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
 
-    # 5. Model (Sticking to B0 for speed, but training it harder)
+    # 5. Model
     model = EfficientNet.from_pretrained('efficientnet-b0', num_classes=2)
     model = model.to(device)
 
@@ -129,7 +112,7 @@ def train_model():
 
         if acc > best_acc:
             best_acc = acc
-            print("💾 Saving Robust Model...")
+            print("💾 Saving Veritas Pro...")
             torch.save(model.state_dict(), SAVE_PATH)
 
 if __name__ == "__main__":
