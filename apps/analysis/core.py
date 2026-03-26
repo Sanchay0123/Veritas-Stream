@@ -1,50 +1,66 @@
-import torch
-import torch.nn as nn
-import torchvision.transforms as transforms
-from torchvision.models import vit_b_16
-from PIL import Image
 import os
-import torch.nn.functional as F
+import io
+import torch
+from PIL import Image, ImageChops, ImageEnhance, ImageStat
 from facenet_pytorch import MTCNN
+from transformers import pipeline
 
-# --- VERITAS PRO: VISION TRANSFORMER (ViT) ARCHITECTURE ---
-class ProDeepFakeDetector:
+class EnterpriseDeepFakeDetector:
     def __init__(self):
-        print("🧠 Initializing Veritas Pro (Vision Transformer Mode)...")
+        print("🧠 Initializing Veritas Stream (Dual-Brain Ensemble + ELA)...")
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"⚙️ Hardware: {self.device}")
         
-        # Face Hunter
         self.face_detector = MTCNN(keep_all=True, device=self.device, post_process=False, margin=0, thresholds=[0.5, 0.6, 0.6])
         
-        # 1. Load the Base ViT Architecture
-        self.model = vit_b_16(weights=None) 
-        # Modify the final classification head for 2 classes (Fake/Real)
-        self.model.heads.head = nn.Linear(self.model.heads.head.in_features, 2)
+        print("⏳ Loading Expert 1 (GANs)...")
+        self.gan_detector = pipeline("image-classification", model="dima806/deepfake_vs_real_image_detection", device=0 if torch.cuda.is_available() else -1)
         
-        # 2. Load our trained weights
-        weights_path = os.path.join(os.path.dirname(__file__), 'weights', 'veritas_vit.pkl')
-        if os.path.exists(weights_path):
-            try:
-                # weights_only=True is safer and removes the PyTorch warning you were seeing
-                state_dict = torch.load(weights_path, map_location=self.device, weights_only=True)
-                self.model.load_state_dict(state_dict)
-                self.model.to(self.device)
-                self.model.eval()
-                print("✅ Veritas ViT Model Loaded")
-            except Exception as e:
-                print(f"❌ CRITICAL: Weights failed: {e}")
-        else:
-            print(f"⚠️ Warning: {weights_path} not found. System is Untrained.")
+        print("⏳ Loading Expert 2 (Diffusions)...")
+        self.diffusion_detector = pipeline("image-classification", model="umm-maybe/AI-image-detector", device=0 if torch.cuda.is_available() else -1)
+        print("✅ Ultimate Brain Loaded")
 
-        self.model.to(self.device)
-        self.model.eval()
+    def _scan_metadata(self, img):
+        print("   [Stage 0: Metadata] Scanning file headers...")
+        ai_signatures = ['gemini', 'midjourney', 'dall-e', 'stable diffusion', 'ai generated', 'google']
+        
+        for key, value in img.info.items():
+            if any(sig in str(value).lower() for sig in ai_signatures):
+                return 1.0 
+                
+        exif = img.getexif()
+        if exif:
+            for tag_id, value in exif.items():
+                if any(sig in str(value).lower() for sig in ai_signatures):
+                    return 1.0 
+        return 0.0
 
-        # 3. ViT Standard Transform (224x224 is mandatory for ViT patches)
-        self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
+    def _generate_ela(self, img):
+        """Calculates the Error Level Analysis variance."""
+        print("   [Stage 1: Forensic Math] Running Error Level Analysis...")
+        
+        # 1. Save temporary compressed version
+        temp_io = io.BytesIO()
+        img.save(temp_io, 'JPEG', quality=90)
+        temp_io.seek(0)
+        compressed_img = Image.open(temp_io)
+        
+        # 2. Calculate pixel difference
+        ela_map = ImageChops.difference(img, compressed_img)
+        
+        # 3. Enhance brightness to see the hidden noise
+        extrema = ela_map.getextrema()
+        max_diff = max([ex[1] for ex in extrema]) if extrema else 1
+        if max_diff == 0: max_diff = 1
+        scale = 255.0 / max_diff
+        ela_map = ImageEnhance.Brightness(ela_map).enhance(scale)
+        
+        # 4. Statistical Variance (AI images are usually very low variance/too clean)
+        stat = ImageStat.Stat(ela_map)
+        variance = sum(stat.var) / len(stat.var)
+        
+        print(f"      -> ELA Noise Variance: {variance:.2f}")
+        return variance
 
     def make_ffhq_crop(self, img, box):
         width, height = img.size
@@ -59,45 +75,66 @@ class ProDeepFakeDetector:
         new_y2 = min(height, int(cy + new_side / 2))
         return img.crop((new_x1, new_y1, new_x2, new_y2))
 
-    def _predict_single(self, img):
-        rgb_tensor = self.transform(img).to(self.device).unsqueeze(0)
+    def _extract_score(self, hf_output):
+        for pred in hf_output:
+            label = pred['label'].lower()
+            if label in ['fake', 'artificial', 'ai']:
+                return pred['score']
         
-        with torch.no_grad():
-            output = self.model(rgb_tensor)
-            probs = F.softmax(output, dim=1)
-            
-            # --- THE WIRETAP ---
-            print(f"\n🧠 [AI BRAIN DUMP]")
-            print(f"Raw Output (Logits): {output.tolist()}")
-            print(f"Probabilities: {probs.tolist()}")
-            print(f"Class 0 Score: {probs[0][0].item() * 100:.2f}%")
-            print(f"Class 1 Score: {probs[0][1].item() * 100:.2f}%\n")
-            
-            # Assuming standard ImageFolder: 0=Fake, 1=Real
-            return probs[0][0].item()
+        top_label = hf_output[0]['label'].lower()
+        if top_label in ['real', 'human', 'original']:
+            return 1.0 - hf_output[0]['score']
+        return 0.0
+
+    def _run_ensemble(self, img, stage_name):
+        score_1 = self._extract_score(self.gan_detector(img))
+        score_2 = self._extract_score(self.diffusion_detector(img))
+        final_score = max(score_1, score_2)
+        print(f"   [{stage_name}] Ensemble Score: {final_score * 100:.2f}% (GAN: {score_1*100:.0f}%, Diff: {score_2*100:.0f}%)")
+        return final_score
 
     def analyze(self, image_path):
         try:
             full_image = Image.open(image_path).convert('RGB')
-            # 1. Hunt for faces
-            boxes, _ = self.face_detector.detect(full_image)
-            
-            # 2. 🛑 THE FIX: The Face Gate Bypass
-            if boxes is None:
-                print("⚠️ No face detected. Defaulting to Authentic (0.0).")
-                return 0.0 # Returns 0% Fake
-            
-            # 3. Analyze detected faces
+            width, height = full_image.size
             scores = []
-            for box in boxes:
-                face_crop = self.make_ffhq_crop(full_image, box)
-                scores.append(self._predict_single(face_crop))
+            
+            print(f"\n🧠 [AI BRAIN DUMP - THE GAUNTLET]")
 
-            # Return the highest fake score found in the image
-            return max(scores)
+            # STAGE 0: METADATA
+            if self._scan_metadata(full_image) == 1.0:
+                print("   🚨 Metadata Triggered! Auto-Failing Image.")
+                return 1.0
+
+            # STAGE 1: FORENSIC MATH (ELA)
+            ela_variance = self._generate_ela(full_image)
+            # If the variance is unnaturally low (too clean), it's highly suspicious.
+            # We will just log it for now to establish a baseline.
+            if ela_variance < 500: 
+                 print("      ⚠️ Warning: ELA Variance is suspiciously flat (indicates AI generation).")
+
+            # STAGE 2: FULL CONTEXT
+            scores.append(self._run_ensemble(full_image, "Stage 2: Full Context"))
+
+            # STAGE 3: WATERMARK HUNTER
+            corner_crop = full_image.crop((int(width * 0.85), int(height * 0.85), width, height))
+            scores.append(self._run_ensemble(corner_crop, "Stage 3: Watermark Hunter"))
+
+            # STAGE 4: FACE HUNTER
+            boxes, _ = self.face_detector.detect(full_image)
+            if boxes is not None:
+                for i, box in enumerate(boxes):
+                    face_crop = self.make_ffhq_crop(full_image, box)
+                    scores.append(self._run_ensemble(face_crop, f"Stage 4: Face Crop {i+1}"))
+            else:
+                print("   [Face Hunter] ⚠️ No faces detected.")
+
+            final_score = max(scores)
+            print(f"🚩 FINAL PIPELINE SCORE: {final_score * 100:.2f}% Fake\n")
+            return final_score
 
         except Exception as e:
             print(f"❌ Analysis Failed: {e}")
-            return 0.0 # Failsafe: If the image is corrupted, just pass it as Authentic
+            return 0.0 
 
-DeepFakeDetector = ProDeepFakeDetector
+DeepFakeDetector = EnterpriseDeepFakeDetector
