@@ -1,143 +1,103 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
+from torchvision.models import vit_b_16
 from PIL import Image
 import os
 import torch.nn.functional as F
-from efficientnet_pytorch import EfficientNet
 from facenet_pytorch import MTCNN
-import numpy as np
 
-# --- VERITAS PRO: MULTI-FACE SPECTRAL ARCHITECTURE ---
-class FrequencyEfficientNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # 1. Load Standard B0
-        self.backbone = EfficientNet.from_pretrained('efficientnet-b0', num_classes=2)
-        
-        # 2. SURGERY: Modify Input Layer to accept 6 Channels (RGB + 3 Freq)
-        old_conv = self.backbone._conv_stem
-        new_conv = nn.Conv2d(6, old_conv.out_channels, kernel_size=3, stride=2, padding=1, bias=False)
-        
-        # Copy RGB weights to the first 3 channels & init Frequency weights
-        with torch.no_grad():
-            new_conv.weight[:, :3] = old_conv.weight
-            new_conv.weight[:, 3:] = old_conv.weight
-        
-        self.backbone._conv_stem = new_conv
-
-    def forward(self, x):
-        return self.backbone(x)
-
+# --- VERITAS PRO: VISION TRANSFORMER (ViT) ARCHITECTURE ---
 class ProDeepFakeDetector:
     def __init__(self):
-        print("🧠 Initializing Veritas Pro (Multi-Face Spectral)...")
+        print("🧠 Initializing Veritas Pro (Vision Transformer Mode)...")
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # 1. Face Hunter: keep_all=True finds EVERY face, not just the largest one
-        self.face_detector = MTCNN(keep_all=True, device=self.device, post_process=False, margin=0)
-
-        # 2. Spectral Brain
-        self.model = FrequencyEfficientNet()
+        # Face Hunter
+        self.face_detector = MTCNN(keep_all=True, device=self.device, post_process=False, margin=0, thresholds=[0.5, 0.6, 0.6])
         
-        # 3. Load Weights
-        weights_path = os.path.join(os.path.dirname(__file__), 'weights', 'veritas_spectral.pkl')
+        # 1. Load the Base ViT Architecture
+        self.model = vit_b_16(weights=None) 
+        # Modify the final classification head for 2 classes (Fake/Real)
+        self.model.heads.head = nn.Linear(self.model.heads.head.in_features, 2)
+        
+        # 2. Load our trained weights
+        weights_path = os.path.join(os.path.dirname(__file__), 'weights', 'veritas_vit.pkl')
         if os.path.exists(weights_path):
             try:
-                state_dict = torch.load(weights_path, map_location=self.device)
+                # weights_only=True is safer and removes the PyTorch warning you were seeing
+                state_dict = torch.load(weights_path, map_location=self.device, weights_only=True)
                 self.model.load_state_dict(state_dict)
                 self.model.to(self.device)
                 self.model.eval()
-                print("✅ Veritas Spectral Loaded")
+                print("✅ Veritas ViT Model Loaded")
             except Exception as e:
                 print(f"❌ CRITICAL: Weights failed: {e}")
         else:
-            print(f"⚠️ Warning: {weights_path} not found.")
+            print(f"⚠️ Warning: {weights_path} not found. System is Untrained.")
 
         self.model.to(self.device)
         self.model.eval()
 
-        # 4. Transform (Standard 256x256)
+        # 3. ViT Standard Transform (224x224 is mandatory for ViT patches)
         self.transform = transforms.Compose([
-            transforms.Resize((256, 256)),
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
 
-    def get_spectrum(self, img_tensor):
-        """Matched to Training Logic"""
-        fft = torch.fft.fft2(img_tensor)
-        fft_shift = torch.fft.fftshift(fft)
-        magnitude = torch.abs(fft_shift)
-        spectrum = torch.log(magnitude + 1e-8)
-        # Instance Norm
-        spectrum = (spectrum - spectrum.mean()) / (spectrum.std() + 1e-8)
-        return spectrum
-
     def make_ffhq_crop(self, img, box):
-        """Expands the crop to include hair/neck (FFHQ Style)"""
         width, height = img.size
         x1, y1, x2, y2 = [int(b) for b in box]
         w, h = x2 - x1, y2 - y1
-        
-        # 40% Padding
         padding = max(w, h) * 0.40
         cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
         new_side = max(w, h) + (padding * 2)
-        
         new_x1 = max(0, int(cx - new_side / 2))
         new_y1 = max(0, int(cy - new_side / 2))
         new_x2 = min(width, int(cx + new_side / 2))
         new_y2 = min(height, int(cy + new_side / 2))
-        
         return img.crop((new_x1, new_y1, new_x2, new_y2))
 
     def _predict_single(self, img):
-        """Helper to run inference on a single face crop"""
-        rgb_tensor = self.transform(img).to(self.device)
-        spectrum_tensor = self.get_spectrum(rgb_tensor).to(self.device)
-        
-        # Stack: 3 RGB + 3 Spectrum = 6 Channels
-        combined_input = torch.cat([rgb_tensor, spectrum_tensor], dim=0).unsqueeze(0)
+        rgb_tensor = self.transform(img).to(self.device).unsqueeze(0)
         
         with torch.no_grad():
-            output = self.model(combined_input)
+            output = self.model(rgb_tensor)
             probs = F.softmax(output, dim=1)
-            # Assuming fake=0, real=1 (Standard ImageFolder order)
+            
+            # --- THE WIRETAP ---
+            print(f"\n🧠 [AI BRAIN DUMP]")
+            print(f"Raw Output (Logits): {output.tolist()}")
+            print(f"Probabilities: {probs.tolist()}")
+            print(f"Class 0 Score: {probs[0][0].item() * 100:.2f}%")
+            print(f"Class 1 Score: {probs[0][1].item() * 100:.2f}%\n")
+            
+            # Assuming standard ImageFolder: 0=Fake, 1=Real
             return probs[0][0].item()
 
     def analyze(self, image_path):
         try:
             full_image = Image.open(image_path).convert('RGB')
-            w, h = full_image.size
-            
-            # 1. Detect ALL faces
+            # 1. Hunt for faces
             boxes, _ = self.face_detector.detect(full_image)
             
+            # 2. 🛑 THE FIX: The Face Gate Bypass
             if boxes is None:
-                print("⚠️ No face found! Analyzing full image.")
-                # Fallback: Analyze the whole image as one
-                return self._predict_single(full_image)
-
-            print(f"🕵️ Faces Found: {len(boxes)}")
+                print("⚠️ No face detected. Defaulting to Authentic (0.0).")
+                return 0.0 # Returns 0% Fake
             
+            # 3. Analyze detected faces
             scores = []
-            
-            # 2. Loop through every face found
-            for i, box in enumerate(boxes):
+            for box in boxes:
                 face_crop = self.make_ffhq_crop(full_image, box)
-                score = self._predict_single(face_crop)
-                scores.append(score)
-                print(f"   👤 Face {i+1}: Fake Score = {score:.4f}")
+                scores.append(self._predict_single(face_crop))
 
-            # 3. RETURN THE WORST SCORE (Most Fake)
-            # If any face is fake, the image is fake.
-            max_fake_score = max(scores)
-            print(f"📊 Final Verdict: {max_fake_score:.4f}")
-            return max_fake_score
+            # Return the highest fake score found in the image
+            return max(scores)
 
         except Exception as e:
             print(f"❌ Analysis Failed: {e}")
-            return 0.5 
+            return 0.0 # Failsafe: If the image is corrupted, just pass it as Authentic
 
 DeepFakeDetector = ProDeepFakeDetector

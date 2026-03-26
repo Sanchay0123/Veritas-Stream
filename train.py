@@ -2,68 +2,25 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
+from torchvision.models import vit_b_16, ViT_B_16_Weights
 from torch.utils.data import DataLoader, random_split, Dataset
 import os
 from tqdm import tqdm
-from efficientnet_pytorch import EfficientNet
-from PIL import Image
+from PIL import Image, ImageFilter
 import random
 import io
 import numpy as np
 
 # --- CONFIGURATION ---
 DATA_DIR = "storage/dataset/130k_faces/images" 
-BATCH_SIZE = 32
-LEARNING_RATE = 0.0001
+BATCH_SIZE = 32  
+LEARNING_RATE = 1e-5 
+WEIGHT_DECAY = 0.01
 EPOCHS = 4
-SAVE_PATH = "apps/analysis/weights/veritas_spectral.pkl"
+SAVE_PATH = "apps/analysis/weights/veritas_vit.pkl"
 
-# --- 1. ROBUST FREQUENCY CONVERTER ---
-def get_spectrum(img_tensor):
-    """
-    FIXED: Uses Instance Normalization (Mean=0, Std=1).
-    This reveals structural patterns without breaking the neural net with wild values.
-    """
-    fft = torch.fft.fft2(img_tensor)
-    fft_shift = torch.fft.fftshift(fft)
-    magnitude = torch.abs(fft_shift)
-    
-    # Log scale
-    spectrum = torch.log(magnitude + 1e-8)
-    
-    # INSTANCE NORMALIZATION (The Fix)
-    # Forces the spectrum to be a clean, readable map for the AI
-    spectrum = (spectrum - spectrum.mean()) / (spectrum.std() + 1e-8)
-    
-    return spectrum
-
-# --- 2. DATASET ---
-class SpectralDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
-        self.data = datasets.ImageFolder(root_dir)
-        self.transform = transform
-        self.classes = self.data.classes
-        print(f"✅ Classes: {self.classes}") 
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        img, label = self.data[idx]
-        
-        if self.transform:
-            img_tensor = self.transform(img)
-        else:
-            img_tensor = transforms.ToTensor()(img)
-
-        spectrum = get_spectrum(img_tensor)
-        combined_input = torch.cat([img_tensor, spectrum], dim=0)
-        
-        return combined_input, label
-
-# --- 3. WHATSAPP SIMULATOR ---
 class RandomJPEGCompression(object):
-    def __init__(self, quality_range=(40, 90), p=0.5):
+    def __init__(self, quality_range=(50, 90), p=0.5):
         self.quality_range = quality_range
         self.p = p
     def __call__(self, img):
@@ -74,62 +31,88 @@ class RandomJPEGCompression(object):
             return Image.open(buffer).convert('RGB')
         return img
 
-# --- 4. STABILIZED MODEL ---
-class FrequencyEfficientNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.backbone = EfficientNet.from_pretrained('efficientnet-b0', num_classes=2)
-        
-        old_conv = self.backbone._conv_stem
-        new_conv = nn.Conv2d(6, old_conv.out_channels, kernel_size=3, stride=2, padding=1, bias=False)
-        
-        with torch.no_grad():
-            # Keep RGB weights (Channels 0-2)
-            new_conv.weight[:, :3] = old_conv.weight
-            
-            # ZERO-INIT FREQUENCY WEIGHTS (Channels 3-5)
-            # This prevents the model from getting confused at the start.
-            # It will learn to use these channels gradually.
-            nn.init.constant_(new_conv.weight[:, 3:], 0.0)
-            
-        self.backbone._conv_stem = new_conv
+def simulate_diffusion(img):
+    """Applies modern AI flaws ONLY to fake images"""
+    # 1. Micro-blur to destroy GAN checkerboards and simulate Diffusion smoothness
+    img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 0.8)))
+    # 2. Add synthetic latent noise
+    img_array = np.array(img).astype(np.float32)
+    noise = np.random.normal(0, random.uniform(2, 5), img_array.shape)
+    img_array = np.clip(img_array + noise, 0, 255).astype(np.uint8)
+    return Image.fromarray(img_array)
 
-    def forward(self, x):
-        return self.backbone(x)
+# 🛑 THE FIX: SMART DATASET WRAPPER
+class SmartDataset(Dataset):
+    def __init__(self, base_dataset, base_transform):
+        self.base_dataset = base_dataset
+        self.base_transform = base_transform
+
+    def __len__(self):
+        return len(self.base_dataset)
+
+    def __getitem__(self, idx):
+        img, label = self.base_dataset[idx]
+        
+        # 🛑 ONLY apply the simulator if the image is FAKE (label == 0)
+        if label == 0 and random.random() < 0.4:
+            img = simulate_diffusion(img)
+            
+        # Apply standard transforms (Resize, Normalize, etc) to ALL images
+        img_tensor = self.base_transform(img)
+        return img_tensor, label
 
 def train_model():
-    print("🧠 Training Veritas SPECTRAL (Stabilized Mode)...")
+    print("🧠 Training Veritas (Un-Poisoned Smart Dataset)...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"⚙️ Hardware: {device}")
 
-    train_transform = transforms.Compose([
-        RandomJPEGCompression(quality_range=(40, 80), p=0.5), 
-        transforms.Resize((256, 256)),
+    os.makedirs(os.path.dirname(SAVE_PATH), exist_ok=True)
+
+    # Base transforms applied to EVERYTHING
+    base_transform = transforms.Compose([
+        RandomJPEGCompression(quality_range=(50, 90), p=0.3),
+        transforms.Resize((224, 224)),
         transforms.RandomHorizontalFlip(),
         transforms.ColorJitter(brightness=0.1, contrast=0.1),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-    
-    val_transform = transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
 
     print("📂 Loading Dataset...")
-    full_dataset = SpectralDataset(DATA_DIR, transform=train_transform)
+    raw_dataset = datasets.ImageFolder(DATA_DIR) # Load without transforms first
+    print(f"✅ Class Map Confirmed: {raw_dataset.class_to_idx}")
+    
+    # Wrap it in our smart logic
+    full_dataset = SmartDataset(raw_dataset, base_transform)
     
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_data, val_data = random_split(full_dataset, [train_size, val_size])
     
-    train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
+    val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=0, pin_memory=True)
 
-    model = FrequencyEfficientNet().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    criterion = nn.CrossEntropyLoss()
+    model = vit_b_16(weights=ViT_B_16_Weights.DEFAULT)
+    
+    for param in model.parameters():
+        param.requires_grad = False
+        
+    for block in model.encoder.layers[-1:]:
+        for param in block.parameters():
+            param.requires_grad = True
+            
+    for param in model.encoder.ln.parameters():
+        param.requires_grad = True
+    
+    model.heads.head = nn.Linear(model.heads.head.in_features, 2)
+    model = model.to(device)
+
+    unfrozen_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = optim.AdamW(unfrozen_params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    
+    # Keeping the class weights to force it to hunt fakes
+    class_weights = torch.tensor([2.0, 1.0]).to(device)
+    criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
 
     best_acc = 0.0
     
@@ -139,16 +122,13 @@ def train_model():
         
         for images, labels in loop:
             images, labels = images.to(device), labels.to(device)
-            
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            
             loop.set_postfix(loss=loss.item())
 
-        # Validation
         model.eval()
         correct = 0
         total = 0
@@ -166,7 +146,7 @@ def train_model():
         if acc > best_acc:
             best_acc = acc
             torch.save(model.state_dict(), SAVE_PATH)
-            print("💾 Model Saved.")
+            print("💾 Saved Lethal ViT Model.")
 
 if __name__ == "__main__":
     train_model()
