@@ -27,15 +27,23 @@ def upload_and_analyze(request):
                 
                 if existing_report:
                     os.remove(quarantine_path) # Clean up
+                    
+                    # 🎨 Consumer UI Translation (For Existing Reports)
+                    score = existing_report.ai_confidence_score
+                    is_fake = score >= 0.50
+                    
                     return render(request, 'forensics/report.html', {
                         'status': 'Exists',
-                        'report': existing_report
+                        'report': existing_report,
+                        'verdict': 'AI GENERATED' if is_fake else 'AUTHENTIC',
+                        'confidence': f"{score * 100:.1f}%",
+                        'is_fake': is_fake
                     })
 
                 # 3. Execute Pipeline
                 result = engine.execute_full_pipeline(quarantine_path)
 
-                # 🛑 THE FIX: get_or_create prevents the UNIQUE crash
+                # 4. Save Report
                 report, created = ForensicReport.objects.get_or_create(
                     sha256_hash=result['hash'],
                     defaults={
@@ -46,9 +54,17 @@ def upload_and_analyze(request):
                     }
                 )
 
+                # 5. 🎨 Consumer UI Translation (For New Reports)
+                # We hide the multi-stage complexity and provide a clean verdict
+                score = report.ai_confidence_score
+                is_fake = score >= 0.50
+
                 return render(request, 'forensics/report.html', {
                     'status': 'Success',
                     'report': report,
+                    'verdict': 'AI GENERATED' if is_fake else 'AUTHENTIC',
+                    'confidence': f"{score * 100:.1f}%",
+                    'is_fake': is_fake
                 })
 
             except Exception as e:

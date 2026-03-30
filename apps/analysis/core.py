@@ -107,11 +107,8 @@ class EnterpriseDeepFakeDetector:
                 return 1.0
 
             # STAGE 1: FORENSIC MATH (ELA)
+            # Keeping ELA active for raw/uncompressed dataset testing!
             ela_variance = self._generate_ela(full_image)
-            # If the variance is unnaturally low (too clean), it's highly suspicious.
-            # We will just log it for now to establish a baseline.
-            if ela_variance < 500: 
-                 print("      ⚠️ Warning: ELA Variance is suspiciously flat (indicates AI generation).")
 
             # STAGE 2: FULL CONTEXT
             scores.append(self._run_ensemble(full_image, "Stage 2: Full Context"))
@@ -129,12 +126,22 @@ class EnterpriseDeepFakeDetector:
             else:
                 print("   [Face Hunter] ⚠️ No faces detected.")
 
-            final_score = max(scores)
+            # 🧠 THE BIG BRAIN FIX: Heuristic Threat Amplification
+            # Count how many stages are showing "mild" suspicion (>= 25%)
+            suspicious_stages = [s for s in scores if s >= 0.25]
+            raw_max = max(scores)
+            
+            if len(suspicious_stages) >= 2 and raw_max < 0.50:
+                print(f"   🔍 [Heuristic] {len(suspicious_stages)} stages report systemic suspicion. Amplifying threat score!")
+                final_score = min(0.99, raw_max * 1.5) # Apply a 1.5x Multiplier
+            else:
+                final_score = raw_max
+
             print(f"🚩 FINAL PIPELINE SCORE: {final_score * 100:.2f}% Fake\n")
             return final_score
 
         except Exception as e:
             print(f"❌ Analysis Failed: {e}")
-            return 0.0 
+            return 0.0
 
 DeepFakeDetector = EnterpriseDeepFakeDetector
