@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veritas | Forensic Report</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Force Dark Mode Base */
+        body { background-color: #000000 !important; color: #ffffff !important; }
+        
+        /* Containers */
+        .card { background-color: #1a1a1a !important; border: 1px solid #333; }
+        .card-header { border-bottom: 1px solid #333; }
+        .metric-box { background-color: #2d2d2d; padding: 20px; border-radius: 8px; text-align: center; color: #fff; }
+        
+        /* Text Overrides - The Hammer approach */
+        h1, h2, h3, h4, h5, h6 { color: #ffffff !important; }
+        strong, b { color: #ffffff !important; font-weight: 700; } /* Fixes "Storage Status" visibility */
+        p, span, div { color: #e0e0e0; }
+        
+        /* Specific Status Colors */
+        .text-muted { color: #a0a0a0 !important; } /* Lighter gray for readability */
+        .text-danger { color: #ff5252 !important; }
+        .text-success { color: #69f0ae !important; }
+        .hash-code { font-family: 'Courier New', monospace; word-break: break-all; color: #4dd0e1 !important; }
+        
+        .verdict-box { font-size: 2rem; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+
+<div class="container mt-5">
+    <div class="text-center mb-5">
+        <h1 class="display-4">Veritas <span class="text-primary">Stream</span></h1>
+        <p class="lead text-muted">Automated Media Forensics Pipeline</p>
+    </div>
+
+    <div class="card shadow-lg">
+        <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">📄 Analysis Report</h4>
+            
+            {% if status == "Exists" %}
+                <span class="badge bg-warning text-dark">⚠ Retrieved from Vault</span>
+            {% else %}
+                <span class="badge bg-success">✅ New Analysis</span>
+            {% endif %}
+        </div>
+        
+        <div class="card-body">
+            
+            <div class="text-center mb-4">
+                <h5 class="text-white">{{ report.file_name }}</h5>
+                <p class="text-muted small">Report ID: #{{ report.id }}</p>
+            </div>
+
+            <div class="text-center mb-5">
+                <p class="text-muted mb-1">AI Classification Verdict</p>
+                
+                {% if report.ai_confidence_score > 0.5 %}
+                    <div class="verdict-box text-danger">
+                        DEEPFAKE DETECTED
+                    </div>
+                {% else %}
+                    <div class="verdict-box text-success">
+                        AUTHENTIC MEDIA
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="metric-box">
+                        <h5 class="text-muted">Deepfake Probability</h5>
+                        <h2 class="display-6">{{ report.ai_confidence_score }}</h2> 
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="metric-box text-start">
+                        <h5 class="text-muted">SHA-256 Fingerprint</h5>
+                        <div class="hash-code">{{ report.sha256_hash }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-4 border-secondary">
+
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>🗄️ Storage Status:</strong><br>
+                    <span class="text-success small">
+                        <i class="bi bi-shield-lock-fill"></i> Secured in Veritas Vault
+                    </span>
+                    <div class="text-muted" style="font-size: 0.7em;">ID: {{ report.sha256_hash|truncatechars:12 }}</div>
+                </div>
+                <div class="col-md-6">
+                    <strong>🔐 Digital Signature:</strong><br>
+                    <span class="text-muted small">{{ report.rsa_signature|truncatechars:60 }}</span>
+                </div>
+            </div>
+
+            <div class="mt-4 text-center">
+                <a href="/upload/" class="btn btn-outline-primary btn-lg">Scan Another File</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
