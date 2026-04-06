@@ -26,6 +26,8 @@ Thumbs.db
 # --- Heavy Data (DO NOT UPLOAD) ---
 storage/
 apps/analysis/weights/
+apps/storage/
 *.pkl
 *.h5
 *.pth
+staticfiles/
