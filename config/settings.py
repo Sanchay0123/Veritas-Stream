@@ -2,7 +2,7 @@ import environ
 import os
 from pathlib import Path
 
-# Initialize environ
+# Initialize environ with a strict default for production safety
 env = environ.Env(
     DEBUG=(bool, False)
 )
@@ -16,12 +16,25 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 # 🛡️ SECURITY & CORE SETTINGS
 # ==========================================
 SECRET_KEY = env('SECRET_KEY')
-DEBUG = env('DEBUG')
+# Pulls from .env, but defaults to False if missing (Critical for Prod!)
+DEBUG = env('DEBUG') 
 RSA_KEY_PATH = os.path.expanduser('~/.veritas_keys/private_key.pem')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
+
+# 🚀 SUBDOMAIN CONFIGURATION
+# We allow the tunnel address and the local loopback
+ALLOWED_HOSTS = [
+    'veritas-stream.sanchayjain.in', 
+    'localhost', 
+    '127.0.0.1',
+    '[::1]'
+]
+
+# Required for Django's CSRF protection to work over the HTTPS tunnel
+CSRF_TRUSTED_ORIGINS = ['https://veritas-stream.sanchayjain.in']
 
 
 # ==========================================
@@ -79,16 +92,16 @@ TEMPLATES = [
 
 
 # ==========================================
-# 📁 STATIC & MEDIA STORAGE (The Fix)
+# 📁 STATIC & MEDIA STORAGE
 # ==========================================
-STATIC_URL = 'static/'
+# The base URL for static files
+STATIC_URL = '/static/'
+# 🛑 NEW: Where collectstatic will dump your assets for Cloudflare
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # The base URL that serves the media files to the browser
-# Matches the <img src="/media/quarantine/..."> request in your HTML
 MEDIA_URL = '/media/'
-
-# The absolute path to the directory where files are saved on your hard drive
-# Routes Django directly to: <project_root>/apps/storage/
+# The absolute path routing directly to your WSL2 storage architecture
 MEDIA_ROOT = os.path.join(BASE_DIR, 'apps', 'storage')
 
 # Keep your vault root for your background engine pipeline

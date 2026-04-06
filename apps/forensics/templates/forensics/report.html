@@ -37,6 +37,13 @@
         .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
         body { background-color: #111318; color: #e2e2e8; font-family: 'Inter', sans-serif; }
         .forensic-grid { background-image: radial-gradient(circle, #333539 1px, transparent 1px); background-size: 32px 32px; }
+        
+        /* 🚨 Custom Animation for Cryptographic Breach */
+        @keyframes breach-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-breach { animation: breach-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     </style>
 </head>
 
@@ -46,15 +53,21 @@
     <div class="text-xl font-bold text-[#e2e2e8] tracking-widest uppercase">Veritas Stream Forensic Report</div>
 </header>
 
-<nav class="fixed left-0 top-0 h-screen w-64 bg-[#111318] flex flex-col pt-24 font-['Space_Grotesk'] text-sm uppercase tracking-tighter z-40">
+<nav class="fixed left-0 top-0 h-screen w-64 bg-[#111318] flex flex-col pt-24 font-['Space_Grotesk'] text-sm uppercase tracking-tighter border-r-0 z-40">
     <div class="px-8 mb-10">
-        <div class="text-[#FF1744] font-black text-2xl tracking-tighter">VERITAS</div>
+        <div class="text-primary-container font-black text-2xl tracking-tighter">VERITAS</div>
         <div class="text-[#e2e2e8]/40 text-[10px] tracking-[0.2em]">Forensic Node 01</div>
     </div>
+    
     <div class="flex flex-col gap-1">
-        <a class="flex items-center gap-4 bg-[#333539] text-[#FF1744] border-l-4 border-[#FF1744] px-8 py-3" href="#">
+        <a class="flex items-center gap-4 bg-[#333539] text-primary-container border-l-4 border-primary-container px-8 py-3 transition-all" href="#">
             <span class="material-symbols-outlined">inventory_2</span>
             <span>Forensic Archive</span>
+        </a>
+        
+        <a class="flex items-center gap-4 text-[#e2e2e8]/50 hover:text-primary-container px-8 py-3 hover:bg-[#1e2024] border-l-4 border-transparent hover:border-primary-container/50 transition-all group" href="{% url 'upload' %}">
+            <span class="material-symbols-outlined group-hover:-rotate-90 transition-transform duration-300">radar</span>
+            <span>Initialize Scan</span>
         </a>
     </div>
 </nav>
@@ -67,9 +80,11 @@
                 <h1 class="font-headline text-5xl font-black tracking-tighter text-on-surface uppercase mb-2">Analysis Session <span class="text-primary-container">#{{ report.id|default:"8821-X" }}</span></h1>
                 <p class="font-label text-on-surface-variant tracking-widest text-xs uppercase opacity-70">Deepfake Detection Algorithm V4.2.0 • Scanning Node 01</p>
             </div>
-            <div class="bg-surface-container-high px-6 py-2 border-l-2 border-secondary-container">
+            <div class="bg-surface-container-high px-6 py-2 border-l-2 {% if status == 'BREACH_DETECTED' %}border-primary-container{% else %}border-secondary-container{% endif %}">
                 <span class="block text-[10px] text-on-surface-variant uppercase mb-1">Status</span>
-                <span class="text-secondary-container font-headline font-bold uppercase tracking-widest text-sm">Active Scan Complete</span>
+                <span class="{% if status == 'BREACH_DETECTED' %}text-primary-container animate-breach{% else %}text-secondary-container{% endif %} font-headline font-bold uppercase tracking-widest text-sm">
+                    {% if status == 'BREACH_DETECTED' %}SYSTEM COMPROMISED{% else %}Active Scan Complete{% endif %}
+                </span>
             </div>
         </div>
 
@@ -77,55 +92,87 @@
             
             <div class="col-span-12 lg:col-span-7 bg-surface-container-high rounded-xl overflow-hidden relative group">
                 <div class="absolute top-4 left-4 z-10 flex gap-2">
-                    <span class="bg-black/60 backdrop-blur-md px-3 py-1 text-[10px] font-bold tracking-tighter uppercase border border-outline-variant/30 {% if is_fake %}text-primary-container{% else %}text-secondary-container{% endif %}">Evidence Buffer</span>
+                    <span class="bg-black/60 backdrop-blur-md px-3 py-1 text-[10px] font-bold tracking-tighter uppercase border border-outline-variant/30 {% if is_fake or status == 'BREACH_DETECTED' %}text-primary-container{% else %}text-secondary-container{% endif %}">Evidence Buffer</span>
                 </div>
                 <div class="aspect-video w-full bg-surface-container-lowest flex items-center justify-center overflow-hidden">
-                    <img alt="Forensic Analysis" class="w-full h-full object-cover opacity-80" src="{{ image_url }}" />
+                    <img alt="Forensic Analysis" class="w-full h-full object-cover opacity-80 {% if status == 'BREACH_DETECTED' %}grayscale sepia-[.5] hue-rotate-[-50deg] saturate-[2]{% endif %}" src="{{ image_url }}" />
                     
                     <div class="absolute inset-0 pointer-events-none border-[1.5rem] border-surface-container-high"></div>
-                    <div class="absolute inset-0 pointer-events-none ring-1 ring-inset {% if is_fake %}ring-primary-container/20{% else %}ring-secondary-container/20{% endif %}"></div>
+                    <div class="absolute inset-0 pointer-events-none ring-1 ring-inset {% if is_fake or status == 'BREACH_DETECTED' %}ring-primary-container/20{% else %}ring-secondary-container/20{% endif %}"></div>
+                    
+                    {% if status == 'BREACH_DETECTED' %}
+                        <div class="absolute inset-0 bg-primary-container/10 pointer-events-none mix-blend-overlay"></div>
+                    {% endif %}
                 </div>
             </div>
 
             <div class="col-span-12 lg:col-span-5 flex flex-col gap-8">
                 
-                <div class="bg-surface-container p-10 flex flex-col items-center justify-center text-center relative overflow-hidden">
-                    <div class="absolute -top-24 -right-24 w-64 h-64 {% if is_fake %}bg-primary-container{% else %}bg-secondary-container{% endif %} opacity-10 blur-[80px]"></div>
-                    <span class="font-label text-xs uppercase tracking-[0.4em] text-on-surface-variant mb-4">Forensic Verdict</span>
+                <div class="bg-surface-container p-10 flex flex-col items-center justify-center text-center relative overflow-hidden {% if status == 'BREACH_DETECTED' %}border-2 border-primary-container{% endif %}">
                     
-                    <div class="relative">
-                        <h2 class="font-headline text-8xl font-black tracking-tighter uppercase leading-none mb-2 
-                            {% if is_fake %} text-primary-container drop-shadow-[0_0_20px_rgba(255,82,95,0.4)]
-                            {% else %} text-secondary-container drop-shadow-[0_0_20px_rgba(5,231,119,0.4)] {% endif %}">
-                            {{ verdict }}
-                        </h2>
-                        <div class="h-1 w-full {% if is_fake %}bg-primary-container/20{% else %}bg-secondary-container/20{% endif %} mt-4 overflow-hidden">
-                            <div class="h-full {% if is_fake %}bg-primary-container{% else %}bg-secondary-container{% endif %} w-3/4"></div>
+                    {% if status == 'BREACH_DETECTED' %}
+                        <div class="absolute inset-0 bg-primary-container/5 pointer-events-none"></div>
+                        <span class="material-symbols-outlined text-primary-container text-6xl mb-4 relative z-10">gpp_bad</span>
+                        <span class="font-label text-xs uppercase tracking-[0.4em] text-primary-container mb-4 font-bold">Cryptographic Failure</span>
+                        
+                        <div class="relative z-10">
+                            <h2 class="font-headline text-5xl font-black tracking-tighter uppercase leading-none mb-2 text-primary-container drop-shadow-[0_0_20px_rgba(255,82,95,0.4)]">
+                                {{ verdict }}
+                            </h2>
                         </div>
-                    </div>
-                    
-                    <p class="mt-8 font-label text-sm text-on-surface-variant max-w-[280px] leading-relaxed opacity-60 italic">
-                        {% if is_fake %}
-                            Synthetically generated artifacts detected in facial manifold and visual telemetry.
-                        {% else %}
-                            No synthetic anomalies detected. Mathematical pixel-variance aligns with authentic digital capture.
-                        {% endif %}
-                    </p>
+                        
+                        <div class="mt-8 bg-surface-container-lowest border border-primary-container/30 p-4 text-left w-full relative z-10">
+                            <span class="text-primary-container font-mono text-[10px] uppercase block mb-1">Fatal Error</span>
+                            <p class="font-mono text-xs text-on-surface-variant leading-relaxed">
+                                {{ error_message }} Database signature does not mathematically align with the SHA-256 artifact.
+                            </p>
+                        </div>
+                        
+                    {% else %}
+                        <div class="absolute -top-24 -right-24 w-64 h-64 {% if is_fake %}bg-primary-container{% else %}bg-secondary-container{% endif %} opacity-10 blur-[80px]"></div>
+                        <span class="font-label text-xs uppercase tracking-[0.4em] text-on-surface-variant mb-4">Forensic Verdict</span>
+                        
+                        <div class="relative">
+                            <h2 class="font-headline text-8xl font-black tracking-tighter uppercase leading-none mb-2 
+                                {% if is_fake %} text-primary-container drop-shadow-[0_0_20px_rgba(255,82,95,0.4)]
+                                {% else %} text-secondary-container drop-shadow-[0_0_20px_rgba(5,231,119,0.4)] {% endif %}">
+                                {{ verdict }}
+                            </h2>
+                            <div class="h-1 w-full {% if is_fake %}bg-primary-container/20{% else %}bg-secondary-container/20{% endif %} mt-4 overflow-hidden">
+                                <div class="h-full {% if is_fake %}bg-primary-container{% else %}bg-secondary-container{% endif %} w-3/4"></div>
+                            </div>
+                        </div>
+                        
+                        <p class="mt-8 font-label text-sm text-on-surface-variant max-w-[280px] leading-relaxed opacity-60 italic">
+                            {% if is_fake %}
+                                Synthetically generated artifacts detected in facial manifold and visual telemetry.
+                            {% else %}
+                                No synthetic anomalies detected. Mathematical pixel-variance aligns with authentic digital capture.
+                            {% endif %}
+                        </p>
+                    {% endif %}
                 </div>
 
-                <div class="bg-surface-container-high p-8 flex items-center gap-10">
+                <div class="bg-surface-container-high p-8 flex items-center gap-10 {% if status == 'BREACH_DETECTED' %}opacity-50 grayscale pointer-events-none{% endif %}">
                     <div class="relative w-32 h-32 flex items-center justify-center">
                         <svg class="w-full h-full transform -rotate-90">
                             <circle class="text-surface-container-lowest" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-width="8"></circle>
-                            <circle class="{% if is_fake %}text-primary-container{% else %}text-secondary-container{% endif %}" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-dasharray="364" stroke-dashoffset="60" stroke-width="8"></circle>
+                            {% if status != 'BREACH_DETECTED' %}
+                                <circle class="{% if is_fake %}text-primary-container{% else %}text-secondary-container{% endif %}" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-dasharray="364" stroke-dashoffset="60" stroke-width="8"></circle>
+                            {% endif %}
                         </svg>
-                        <span class="absolute font-headline text-3xl font-black">{{ confidence|slice:":-2" }}%</span> 
+                        <span class="absolute font-headline text-3xl font-black">
+                            {% if status == 'BREACH_DETECTED' %}--{% else %}{{ confidence|slice:":-2" }}%{% endif %}
+                        </span> 
                     </div>
+
                     <div class="flex-1">
                         <span class="font-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1 block">Threat Score</span>
-                        <div class="font-headline text-4xl font-bold tracking-tighter text-on-surface mb-2">{{ confidence }}</div>
-                        <div class="text-[10px] font-label {% if is_fake %}text-primary-container bg-primary-container/10{% else %}text-secondary-container bg-secondary-container/10{% endif %} px-2 py-0.5 inline-block uppercase tracking-tighter">
-                            {% if is_fake %}High Confidence Signature{% else %}Authentic Baseline{% endif %}
+                        <div class="font-headline text-4xl font-bold tracking-tighter text-on-surface mb-2">
+                            {% if status == 'BREACH_DETECTED' %}NULL{% else %}{{ confidence }}{% endif %}
+                        </div>
+                        <div class="text-[10px] font-label {% if is_fake or status == 'BREACH_DETECTED' %}text-primary-container bg-primary-container/10{% else %}text-secondary-container bg-secondary-container/10{% endif %} px-2 py-0.5 inline-block uppercase tracking-tighter">
+                            {% if status == 'BREACH_DETECTED' %}Metrics Invalidated{% elif is_fake %}High Confidence Signature{% else %}Authentic Baseline{% endif %}
                         </div>
                     </div>
                 </div>
@@ -134,13 +181,15 @@
             <div class="col-span-12">
                 <div class="bg-surface-container-lowest p-8 border border-outline-variant/10">
                     <div class="flex items-center gap-3 mb-8">
-                        <span class="material-symbols-outlined text-sm {% if is_fake %}text-primary-container{% else %}text-secondary-container{% endif %}">description</span>
+                        <span class="material-symbols-outlined text-sm {% if is_fake or status == 'BREACH_DETECTED' %}text-primary-container{% else %}text-secondary-container{% endif %}">
+                            {% if status == 'BREACH_DETECTED' %}lock_broken{% else %}description{% endif %}
+                        </span>
                         <h3 class="font-headline text-sm font-bold uppercase tracking-widest">Digital Chain of Custody / Metadata</h3>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
                         <div>
                             <span class="block text-[10px] font-label text-on-surface-variant uppercase tracking-widest mb-2 opacity-50">File Name</span>
-                            <code class="text-on-surface font-mono text-sm block truncate bg-surface-container p-2 border-l-2 {% if is_fake %}border-primary-container{% else %}border-secondary-container{% endif %}">
+                            <code class="text-on-surface font-mono text-sm block truncate bg-surface-container p-2 border-l-2 {% if is_fake or status == 'BREACH_DETECTED' %}border-primary-container{% else %}border-secondary-container{% endif %}">
                                 {{ report.file_name }}
                             </code>
                         </div>

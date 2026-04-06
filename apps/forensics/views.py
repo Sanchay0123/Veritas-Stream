@@ -3,11 +3,14 @@ import re
 from django.shortcuts import render, redirect
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
+
+# 🛑 These were the missing imports causing the 500 crash!
 from .models import ForensicReport
 from .forms import ForensicUploadForm 
 from .core import VeritasForensicEngine
 
 engine = VeritasForensicEngine(private_key_path=settings.RSA_KEY_PATH)
+
 
 def get_guaranteed_url(report_vault_path, django_filename):
     """
@@ -58,16 +61,36 @@ def upload_and_analyze(request):
                 existing_report = ForensicReport.objects.filter(sha256_hash=file_hash).first()
                 
                 if existing_report:
-                    # Clean up the duplicate from quarantine
                     if os.path.exists(quarantine_path):
                         os.remove(quarantine_path) 
                     
-                    # 🎨 Consumer UI Translation (For Existing Reports)
+                    final_image_url = get_guaranteed_url(existing_report.vault_path, existing_report.file_name)
+
+                    # 🚨 UPDATED: Passing the score for full data integrity check
+                    try:
+                        is_valid = engine.verify_signature(
+                            existing_report.sha256_hash, 
+                            existing_report.rsa_signature,
+                            existing_report.ai_confidence_score  # <--- Added this
+                        )
+                    except Exception as e:
+                        print(f"⚠️ SIGNATURE ERROR: {str(e)}")
+                        is_valid = False
+
+                    if not is_valid:
+                        print(f"🚨 BREACH DETECTED: Tampered record for hash {file_hash}")
+                        return render(request, 'forensics/report.html', {
+                            'status': 'BREACH_DETECTED',
+                            'verdict': 'DATA COMPROMISED',
+                            'confidence': 'ERR_SIG_INVALID',
+                            'is_fake': True, # Forces the UI red theme if you use this flag
+                            'image_url': final_image_url,
+                            'error_message': 'CRYPTOGRAPHIC FAILURE: The forensic archive for this file has been illegally altered.'
+                        })
+                    
+                    # 🎨 Consumer UI Translation (For Valid Existing Reports)
                     score = existing_report.ai_confidence_score
                     is_fake = score >= 0.50
-                    
-                    # 🚀 Hit the Auto-Locator
-                    final_image_url = get_guaranteed_url(existing_report.vault_path, existing_report.file_name)
                     
                     return render(request, 'forensics/report.html', {
                         'status': 'Exists',

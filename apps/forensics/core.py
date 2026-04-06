@@ -90,6 +90,42 @@ class VeritasForensicEngine:
         )
         return base64.b64encode(signature).decode('utf-8')
 
+    def verify_signature(self, file_hash, signature_b64, ai_confidence):
+        """
+        🚨 THE TRIPWIRE: Reconstructs the 'envelope' and verifies it 
+        against the RSA Public Key.
+        """
+        if not self.private_key_path or not os.path.exists(self.private_key_path):
+            return False
+
+        try:
+            # 1. Reconstruct the EXACT string used during signing
+            # Note: Ensure the formatting matches sign_report exactly
+            data_to_verify = f"Hash:{file_hash}|Result:{ai_confidence}"
+            
+            # 2. Load Public Key from your Private Key
+            with open(self.private_key_path, "rb") as key_file:
+                private_key = serialization.load_pem_private_key(
+                    key_file.read(), password=None
+                )
+            public_key = private_key.public_key()
+
+            # 3. Decode and Verify
+            signature_bytes = base64.b64decode(signature_b64)
+            public_key.verify(
+                signature_bytes,
+                data_to_verify.encode(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return True
+        except Exception as e:
+            print(f"🛑 CRYPTOGRAPHIC VERIFICATION FAILED: {e}")
+            return False
+
     def archive_to_vault(self, input_path):
         """Step 4: Secure Storage on External Drive"""
         filename = os.path.basename(input_path)
