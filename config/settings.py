@@ -12,22 +12,32 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Read the .env file
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-# --- Security Settings ---
+# ==========================================
+# 🛡️ SECURITY & CORE SETTINGS
+# ==========================================
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 RSA_KEY_PATH = os.path.expanduser('~/.veritas_keys/private_key.pem')
 
-# --- Storage Settings ---
-MEDIA_ROOT = os.path.join(BASE_DIR, 'storage')
-VAULT_ROOT = env('VAULT_STORAGE_PATH')
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+ROOT_URLCONF = 'config.urls'
+WSGI_APPLICATION = 'config.wsgi.application'
 
 
+# ==========================================
+# 💾 DATABASE
+# ==========================================
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+
+# ==========================================
+# 🧩 APPLICATION DEFINITION
+# ==========================================
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -36,7 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # Your Veritas Apps
+    # 🧠 Veritas Stream Custom Apps
     'apps.forensics',
     'apps.analysis',
 ]
@@ -54,7 +64,7 @@ MIDDLEWARE = [
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [], # Add strings like os.path.join(BASE_DIR, 'templates') later
+        'DIRS': [], 
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -68,19 +78,18 @@ TEMPLATES = [
 ]
 
 
-# Static files (CSS, JavaScript, Images)
+# ==========================================
+# 📁 STATIC & MEDIA STORAGE (The Fix)
+# ==========================================
 STATIC_URL = 'static/'
 
-# Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# Internal project URLs
-ROOT_URLCONF = 'config.urls'
-WSGI_APPLICATION = 'config.wsgi.application'
-
-
-# The absolute path to the directory where files are saved
-MEDIA_ROOT = os.path.join(BASE_DIR, 'storage')
-
-# The URL that serves the media files (for development only)
+# The base URL that serves the media files to the browser
+# Matches the <img src="/media/quarantine/..."> request in your HTML
 MEDIA_URL = '/media/'
+
+# The absolute path to the directory where files are saved on your hard drive
+# Routes Django directly to: <project_root>/apps/storage/
+MEDIA_ROOT = os.path.join(BASE_DIR, 'apps', 'storage')
+
+# Keep your vault root for your background engine pipeline
+VAULT_ROOT = env('VAULT_STORAGE_PATH')

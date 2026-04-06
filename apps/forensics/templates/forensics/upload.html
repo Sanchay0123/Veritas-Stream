@@ -1,29 +1,135 @@
 <!DOCTYPE html>
-<html>
+<html class="dark" lang="en">
 <head>
-    <title>Upload Evidence - Veritas Stream</title>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Veritas Stream | Initialize Scan</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-container": "#ff525f",
+                        "on-surface": "#e2e2e8",
+                        "surface-container-high": "#282a2e",
+                        "surface-container-lowest": "#0c0e12",
+                        "secondary-container": "#05e777",
+                        "on-surface-variant": "#e8bcbb",
+                        "surface-container": "#1e2024",
+                        "background": "#111318",
+                        "outline-variant": "#5e3f3e",
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #2c3e50; color: white; }
-        .upload-card { background: #34495e; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; }
-        .btn { background: #e74c3c; color: white; border: none; padding: 10px 20px; font-size: 1rem; border-radius: 5px; cursor: pointer; margin-top: 15px; }
-        .btn:hover { background: #c0392b; }
-        /* Style the Django Form Errors */
-        .errorlist { color: #e74c3c; list-style: none; padding: 0; font-weight: bold; }
-        input[type="file"] { margin: 15px 0; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        body { background-color: #111318; color: #e2e2e8; font-family: 'Inter', sans-serif; }
+        .forensic-grid { background-image: radial-gradient(circle, #333539 1px, transparent 1px); background-size: 32px 32px; }
+        
+        /* Custom styling to hide the default ugly file input but keep it clickable */
+        input[type="file"] {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0,0,0,0);
+            border: 0;
+        }
     </style>
 </head>
-<body>
-    <div class="upload-card">
-        <h1>Veritas Stream</h1>
-        <p>Secure Deepfake Detection Pipeline</p>
+
+<body class="bg-background selection:bg-primary-container selection:text-white">
+
+<header class="fixed top-0 z-50 w-full flex justify-between items-center px-8 py-4 bg-[#1e2024] font-['Space_Grotesk'] font-bold tracking-tight border-b-0 shadow-none">
+    <div class="text-xl font-bold text-[#e2e2e8] tracking-widest uppercase">Veritas Stream Forensic Engine</div>
+</header>
+
+<nav class="fixed left-0 top-0 h-screen w-64 bg-[#111318] flex flex-col pt-24 font-['Space_Grotesk'] text-sm uppercase tracking-tighter z-40">
+    <div class="px-8 mb-10">
+        <div class="text-[#FF1744] font-black text-2xl tracking-tighter">VERITAS</div>
+        <div class="text-[#e2e2e8]/40 text-[10px] tracking-[0.2em]">Forensic Node 01</div>
+    </div>
+    <div class="flex flex-col gap-1">
+        <a class="flex items-center gap-4 bg-[#333539] text-[#FF1744] border-l-4 border-[#FF1744] px-8 py-3" href="{% url 'upload' %}">
+            <span class="material-symbols-outlined">sensors</span>
+            <span>Initialize Scan</span>
+        </a>
+    </div>
+</nav>
+
+<main class="ml-64 pt-24 min-h-screen forensic-grid p-10 flex flex-col justify-center items-center">
+    <div class="w-full max-w-3xl">
         
-        <form method="post" enctype="multipart/form-data">
+        <div class="mb-8 text-center">
+            <h1 class="font-headline text-5xl font-black tracking-tighter text-on-surface uppercase mb-2">Quarantine <span class="text-primary-container">Airlock</span></h1>
+            <p class="font-label text-on-surface-variant tracking-widest text-xs uppercase opacity-70">Upload media for deepfake verification and metadata extraction</p>
+        </div>
+
+        {% if error %}
+        <div class="bg-primary-container/10 border border-primary-container p-4 mb-8 text-center text-primary-container font-mono text-sm uppercase tracking-widest">
+            <span class="material-symbols-outlined align-middle mr-2 text-base">warning</span>
+            System Error: {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" enctype="multipart/form-data" class="bg-surface-container-high p-1 border border-outline-variant/20 shadow-2xl">
             {% csrf_token %}
             
-            {{ form.as_p }}
-            
-            <button type="submit" class="btn">Scan Evidence</button>
+            <div class="bg-surface-container-lowest p-12 text-center border border-dashed border-outline-variant/40 hover:border-primary-container/60 transition-colors relative group cursor-pointer" onclick="document.getElementById('file-upload').click()">
+                
+                <span class="material-symbols-outlined text-6xl text-on-surface-variant mb-6 group-hover:text-primary-container group-hover:scale-110 transition-all duration-300">shield_lock</span>
+                
+                <h3 class="font-headline text-2xl font-bold uppercase tracking-widest text-on-surface mb-2">Secure Dropzone</h3>
+                <p class="font-label text-xs uppercase tracking-widest text-on-surface-variant opacity-60 mb-6">Click to browse or drag and drop JPG/PNG files</p>
+                
+                <input id="file-upload" name="media_file" type="file" accept="image/*" onchange="updateFileName(this)" required>
+                
+                <div id="file-name-display" class="hidden mt-4 inline-block bg-surface-container px-4 py-2 font-mono text-xs text-secondary-container border border-secondary-container/30 uppercase tracking-widest">
+                    No file selected
+                </div>
+            </div>
+
+            <button type="submit" class="w-full bg-primary-container/10 hover:bg-primary-container/20 border-t border-outline-variant/20 text-primary-container p-6 flex items-center justify-center gap-3 transition-colors group">
+                <span class="font-headline font-bold text-lg uppercase tracking-[0.2em]">Execute Pipeline</span>
+                <span class="material-symbols-outlined group-hover:translate-x-2 transition-transform">arrow_forward_ios</span>
+            </button>
         </form>
+
+        <div class="mt-12 font-mono text-[10px] text-on-surface-variant/40 uppercase tracking-widest text-center">
+            <p>> AWAITING EVIDENCE UPLOAD...</p>
+            <p>> NODE 01 SECURE CONNECTION ESTABLISHED</p>
+            <p>> ENSEMBLE MODELS LOADED IN VRAM</p>
+        </div>
+
     </div>
+</main>
+
+<script>
+    // Simple script to show the user which file they selected before hitting submit
+    function updateFileName(input) {
+        const display = document.getElementById('file-name-display');
+        if (input.files && input.files[0]) {
+            display.textContent = input.files[0].name;
+            display.classList.remove('hidden');
+        } else {
+            display.classList.add('hidden');
+        }
+    }
+</script>
+
 </body>
 </html>
