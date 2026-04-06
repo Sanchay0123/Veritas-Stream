@@ -19,6 +19,7 @@ SECRET_KEY = env('SECRET_KEY')
 # Pulls from .env, but defaults to False if missing (Critical for Prod!)
 DEBUG = env('DEBUG') 
 RSA_KEY_PATH = os.path.expanduser('~/.veritas_keys/private_key.pem')
+VT_API_KEY = env('VT_API_KEY')  # VirusTotal API Key from .env
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 ROOT_URLCONF = 'config.urls'

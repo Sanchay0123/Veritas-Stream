@@ -4,13 +4,12 @@ from django.shortcuts import render, redirect
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 
-# 🛑 These were the missing imports causing the 500 crash!
 from .models import ForensicReport
 from .forms import ForensicUploadForm 
 from .core import VeritasForensicEngine
+from .utils import sterilize_file  # 🛡️ Defense Utility
 
 engine = VeritasForensicEngine(private_key_path=settings.RSA_KEY_PATH)
-
 
 def get_guaranteed_url(report_vault_path, django_filename):
     """
@@ -19,27 +18,22 @@ def get_guaranteed_url(report_vault_path, django_filename):
     """
     raw_path = str(report_vault_path).replace('\\', '/')
     
-    # Extract expected path
     if 'vault/' in raw_path:
         expected_rel_path = 'vault/' + raw_path.split('vault/')[-1]
     else:
         expected_rel_path = f"vault/{django_filename}"
 
-    # Scenario A: File is exactly where the Engine says it is (Vault)
     if os.path.exists(os.path.join(settings.MEDIA_ROOT, expected_rel_path)):
         return f"/media/{expected_rel_path}"
 
-    # Scenario B: File is still sitting in Quarantine (Engine didn't move it)
     if os.path.exists(os.path.join(settings.MEDIA_ROOT, 'quarantine', django_filename)):
         return f"/media/quarantine/{django_filename}"
 
-    # Scenario C: Engine stripped Django's collision suffix (_Z8HkEN2) during the move
     clean_filename = re.sub(r'_[a-zA-Z0-9]{7}\.', '.', django_filename)
     clean_rel_path = expected_rel_path.replace(django_filename, clean_filename)
     if os.path.exists(os.path.join(settings.MEDIA_ROOT, clean_rel_path)):
         return f"/media/{clean_rel_path}"
 
-    # Fallback (If all fails, let the browser try the original path)
     return f"/media/{expected_rel_path}"
 
 
@@ -56,8 +50,25 @@ def upload_and_analyze(request):
             quarantine_path = fs.path(filename)
 
             try:
-                # 2. Pre-check for duplicates
-                file_hash = engine.get_file_hash(quarantine_path)
+                # 🛡️ STEP 1.5: MALWARE STERILIZATION (The Iron Curtain)
+                # Generate hash early for VirusTotal check
+                temp_hash = engine.get_file_hash(quarantine_path)
+                
+                is_safe, security_msg = sterilize_file(quarantine_path, temp_hash)
+                
+                if not is_safe:
+                    # Instant Nuke: Delete the malicious file immediately
+                    if os.path.exists(quarantine_path):
+                        os.remove(quarantine_path)
+                    
+                    print(f"🚨 SECURITY INTERCEPTION: {security_msg}")
+                    return render(request, 'forensics/upload.html', {
+                        'form': form, 
+                        'error': security_msg  # Alert the user they've been blocked
+                    })
+
+                # 2. Pre-check for duplicates (Proceeds only if CLEAN)
+                file_hash = temp_hash
                 existing_report = ForensicReport.objects.filter(sha256_hash=file_hash).first()
                 
                 if existing_report:
@@ -66,29 +77,26 @@ def upload_and_analyze(request):
                     
                     final_image_url = get_guaranteed_url(existing_report.vault_path, existing_report.file_name)
 
-                    # 🚨 UPDATED: Passing the score for full data integrity check
                     try:
                         is_valid = engine.verify_signature(
                             existing_report.sha256_hash, 
                             existing_report.rsa_signature,
-                            existing_report.ai_confidence_score  # <--- Added this
+                            existing_report.ai_confidence_score
                         )
                     except Exception as e:
                         print(f"⚠️ SIGNATURE ERROR: {str(e)}")
                         is_valid = False
 
                     if not is_valid:
-                        print(f"🚨 BREACH DETECTED: Tampered record for hash {file_hash}")
                         return render(request, 'forensics/report.html', {
                             'status': 'BREACH_DETECTED',
                             'verdict': 'DATA COMPROMISED',
                             'confidence': 'ERR_SIG_INVALID',
-                            'is_fake': True, # Forces the UI red theme if you use this flag
+                            'is_fake': True,
                             'image_url': final_image_url,
-                            'error_message': 'CRYPTOGRAPHIC FAILURE: The forensic archive for this file has been illegally altered.'
+                            'error_message': 'CRYPTOGRAPHIC FAILURE: The forensic archive has been altered.'
                         })
                     
-                    # 🎨 Consumer UI Translation (For Valid Existing Reports)
                     score = existing_report.ai_confidence_score
                     is_fake = score >= 0.50
                     
@@ -101,7 +109,7 @@ def upload_and_analyze(request):
                         'image_url': final_image_url
                     })
 
-                # 3. Execute Pipeline
+                # 3. Execute Pipeline (Only reached if safe and new)
                 result = engine.execute_full_pipeline(quarantine_path)
 
                 # 4. Save Report
@@ -115,11 +123,9 @@ def upload_and_analyze(request):
                     }
                 )
 
-                # 5. 🎨 Consumer UI Translation (For New Reports)
+                # 5. UI Translation
                 score = report.ai_confidence_score
                 is_fake = score >= 0.50
-
-                # 🚀 Hit the Auto-Locator
                 final_image_url = get_guaranteed_url(report.vault_path, report.file_name)
 
                 return render(request, 'forensics/report.html', {
