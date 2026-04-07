@@ -6,6 +6,7 @@ from apps.forensics.views import upload_and_analyze
 from apps.forensics import views
 
 urlpatterns = [
+    path('', views.landing_page, name='landing'),
     path('admin/', admin.site.urls),  
     path('upload/', upload_and_analyze, name='upload'),
     path('', upload_and_analyze, name='home'),

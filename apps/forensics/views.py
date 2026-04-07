@@ -213,3 +213,9 @@ def export_pdf_report(request, report_id):
         return HttpResponse("❌ Error: Report not found in the archive.", status=404)
     except Exception as e:
         return HttpResponse(f"❌ Critical Error: {str(e)}", status=500)
+
+def landing_page(request):
+    """
+    🚀 The Front Door: Introductory landing page for Veritas Stream.
+    """
+    return render(request, 'landing.html')

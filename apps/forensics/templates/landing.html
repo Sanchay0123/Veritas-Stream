@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VERITAS STREAM | Neural Forensics Hub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#45474b",
+                    "on-primary-container": "#5b0010",
+                    "on-error-container": "#ffdad6",
+                    "primary": "#ffb3b2",
+                    "on-secondary-fixed": "#00210c",
+                    "tertiary-container": "#8f9096",
+                    "inverse-primary": "#b81b32",
+                    "secondary": "#7dffa2",
+                    "surface-container-high": "#282a2f",
+                    "secondary-fixed-dim": "#00e475",
+                    "error": "#ffb4ab",
+                    "surface-container": "#1e2025",
+                    "surface-variant": "#33353a",
+                    "surface-bright": "#37393f",
+                    "background": "#111318",
+                    "surface-container-lowest": "#0c0e13",
+                    "on-tertiary-container": "#282a2e",
+                    "primary-fixed-dim": "#ffb3b2",
+                    "on-error": "#690005",
+                    "primary-fixed": "#ffdad9",
+                    "on-primary": "#680014",
+                    "on-secondary-container": "#00622e",
+                    "secondary-container": "#05e777",
+                    "secondary-fixed": "#62ff96",
+                    "error-container": "#93000a",
+                    "primary-container": "#ff525f",
+                    "on-background": "#e2e2e9",
+                    "surface-tint": "#ffb3b2",
+                    "on-tertiary-fixed": "#1a1c20",
+                    "on-primary-fixed-variant": "#920020",
+                    "inverse-surface": "#e2e2e9",
+                    "on-tertiary": "#2f3035",
+                    "outline": "#aa8988",
+                    "on-secondary": "#003918",
+                    "tertiary-fixed-dim": "#c6c6cc",
+                    "inverse-on-surface": "#2e3036",
+                    "tertiary-fixed": "#e2e2e8",
+                    "on-surface-variant": "#e3bebd",
+                    "tertiary": "#c6c6cc",
+                    "outline-variant": "#5a4040",
+                    "on-primary-fixed": "#410009",
+                    "on-surface": "#e2e2e9",
+                    "surface-container-low": "#1a1b21",
+                    "surface-container-highest": "#33353a",
+                    "on-secondary-fixed-variant": "#005226",
+                    "surface-dim": "#111318",
+                    "surface": "#111318"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0px",
+                    "lg": "0px",
+                    "xl": "0px",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Space Grotesk"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #111318; overflow-x: hidden; scroll-behavior: smooth; }
+        .font-space-grotesk { font-family: 'Space Grotesk', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+        .glass-panel { backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+        .neural-glow-green { box-shadow: 0 0 40px -10px rgba(5, 231, 119, 0.3); }
+        .neural-glow-red { box-shadow: 0 0 40px -10px rgba(255, 82, 95, 0.3); }
+        .ambient-glow-primary { filter: drop-shadow(0 0 48px rgba(255, 82, 95, 0.04)); }
+        
+        /* Interactive 3D Backdrop */
+        .neural-gauntlet {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            overflow: hidden;
+            pointer-events: none;
+            background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 82, 95, 0.08) 0%, transparent 40%);
+        }
+        
+        .voronoi-sculpture {
+            position: absolute;
+            inset: -20%;
+            opacity: 0.15;
+            background-image: url("data:image/svg+xml,%3Csvg width='1000' height='1000' viewBox='0 0 1000 1000' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l1000 1000M0 1000L1000 0' stroke='%23e2e2e8' stroke-width='0.5' fill='none'/%3E%3C/svg%3E");
+            transform: rotate(var(--scroll-rotation, 0deg)) scale(var(--scroll-scale, 1));
+            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .dynamic-light {
+            position: absolute;
+            width: 800px;
+            height: 800px;
+            opacity: 0.2;
+            blur: 120px;
+            background: radial-gradient(circle, #05e777 0%, transparent 70%);
+            border-radius: 9999px;
+            mix-blend-mode: screen;
+            left: calc(var(--mouse-x, 50%) - 400px);
+            top: calc(var(--mouse-y, 50%) - 400px);
+            transition: left 0.3s ease-out, top 0.3s ease-out;
+        }
+
+        /* Scroll Animations */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 0.2; transform: scale(1); }
+            50% { opacity: 0.3; transform: scale(1.05); }
+        }
+        .animate-pulse-slow { animation: pulse-slow 8s infinite ease-in-out; }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-secondary-container selection:text-on-secondary-container">
+<!-- Dynamic 3D Backdrop -->
+<div class="neural-gauntlet" id="gauntlet">
+<div class="voronoi-sculpture" id="sculpture"></div>
+<div class="dynamic-light" id="follower"></div>
+<div class="absolute top-1/4 left-1/3 w-64 h-64 bg-primary-container opacity-10 blur-[80px] rounded-full animate-pulse-slow"></div>
+</div>
+<!-- TopNavBar: Fixed -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-8 h-20 bg-[#111318]/90 backdrop-blur-xl border-b border-white/5">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-black uppercase tracking-tighter text-[#e2e2e8]">VERITAS STREAM</span>
+<nav class="hidden md:flex gap-6">
+<a class="uppercase text-xs font-space-grotesk tracking-tighter text-[#05e777] font-bold border-b-2 border-[#05e777] pb-1" href="#">FORENSICS</a>
+
+</nav>
+</div>
+<div class="flex items-center gap-4">
+    <a href="{% url 'upload' %}" class="bg-white/5 hover:bg-white/10 text-[#ff525f] uppercase text-xs font-space-grotesk font-bold px-6 py-4 transition-all duration-300 active:scale-95 border border-[#ff525f]/20">
+        INITIALIZE SCAN
+    </a>
+    <div class="flex gap-2">
+        <button class="p-2 text-[#e2e2e8]/60 hover:text-[#e2e2e8] transition-all duration-300">
+            <span class="material-symbols-outlined">notifications</span>
+        </button>
+    </div>
+</div>
+</header>
+<!-- Main Content Canvas: Full Width -->
+<main class="pt-20 px-8 pb-12 min-h-screen relative overflow-hidden">
+<!-- Hero Section -->
+<section class="min-h-screen flex flex-col items-center justify-center text-center py-20">
+<div class="reveal active">
+<h1 class="text-7xl md:text-9xl font-black uppercase font-space-grotesk tracking-tighter mb-4 leading-none">
+                VERITAS <span class="text-primary-container">STREAM</span>
+</h1>
+<p class="text-xl md:text-3xl font-light text-[#e2e2e8]/80 max-w-3xl mx-auto">
+                Forensics at the Speed of Light. <br/>
+<span class="font-bold text-secondary">Immutable Notarization.</span>
+</p>
+</div>
+<div class="mt-12 reveal active delay-200">
+<span class="material-symbols-outlined text-secondary animate-bounce text-4xl">expand_more</span>
+</div>
+</section>
+<!-- Technical Panels: Vertical Scroll Friendly Layout -->
+<section class="max-w-4xl mx-auto space-y-32 py-20">
+<!-- Panel 1 -->
+<div class="reveal glass-panel bg-[#1e2024]/40 p-10 md:p-16 border border-white/5 relative group hover:bg-[#1e2024]/60 transition-all duration-500">
+<div class="absolute -top-6 -left-6 bg-primary-container p-4">
+<span class="material-symbols-outlined text-white text-4xl">shield_lock</span>
+</div>
+<div class="flex flex-col gap-6">
+<span class="text-xs font-space-grotesk text-[#e2e2e8]/30 tracking-[0.4em] uppercase">Module_01</span>
+<h3 class="font-space-grotesk uppercase font-bold text-3xl md:text-4xl">Threat Sterilization</h3>
+<p class="text-secondary text-sm font-space-grotesk uppercase tracking-widest">ClamAV &amp; VirusTotal Airlock</p>
+<p class="text-[#e2e2e8]/70 text-lg leading-relaxed font-body">
+                    We deploy a relentless, multi-stage sanitization process. This includes Magic Byte validation to block extension spoofing and global SHA-256 querying. Every byte is interrogated before entry.
+                </p>
+</div>
+</div>
+<!-- Panel 2: Staggered Right -->
+<div class="reveal glass-panel bg-[#1e2024]/40 p-10 md:p-16 border border-white/5 relative group hover:bg-[#1e2024]/60 transition-all duration-500 md:translate-x-12">
+<div class="absolute -top-6 -right-6 bg-secondary p-4">
+<span class="material-symbols-outlined text-on-secondary text-4xl">psychology</span>
+</div>
+<div class="flex flex-col gap-6 text-right md:text-left">
+<span class="text-xs font-space-grotesk text-[#e2e2e8]/30 tracking-[0.4em] uppercase">Module_02</span>
+<h3 class="font-space-grotesk uppercase font-bold text-3xl md:text-4xl">Neural Ensemble</h3>
+<p class="text-secondary text-sm font-space-grotesk uppercase tracking-widest">Dual-Brain ViT Architecture</p>
+<p class="text-[#e2e2e8]/70 text-lg leading-relaxed font-body">
+                    Veritas utilizes a high-confidence Vision Transformer (ViT) ensemble. Expert A targets GAN artifacts, while Expert B targets Stable Diffusion signatures. A unified decision engine calculates certainty.
+                </p>
+</div>
+</div>
+<!-- Panel 3 -->
+<div class="reveal glass-panel bg-[#1e2024]/40 p-10 md:p-16 border border-white/5 relative group hover:bg-[#1e2024]/60 transition-all duration-500">
+<div class="absolute -top-6 -left-6 bg-primary-container p-4">
+<span class="material-symbols-outlined text-white text-4xl">analytics</span>
+</div>
+<div class="flex flex-col gap-6">
+<span class="text-xs font-space-grotesk text-[#e2e2e8]/30 tracking-[0.4em] uppercase">Module_03</span>
+<h3 class="font-space-grotesk uppercase font-bold text-3xl md:text-4xl">Heuristic Signals</h3>
+<p class="text-secondary text-sm font-space-grotesk uppercase tracking-widest">Missing EXIF is Suspect</p>
+<p class="text-[#e2e2e8]/70 text-lg leading-relaxed font-body">
+                    We don't just check pixels; we interpret metadata absence. Our system separates Social Media Proxy scrubbing from total Header Absence, identifying tampering where others see blank space.
+                </p>
+</div>
+</div>
+<!-- Panel 4: Staggered Left -->
+<div class="reveal glass-panel bg-[#1e2024]/40 p-10 md:p-16 border border-white/5 relative group hover:bg-[#1e2024]/60 transition-all duration-500 md:-translate-x-12">
+<div class="absolute -top-6 -right-6 bg-secondary p-4">
+<span class="material-symbols-outlined text-on-secondary text-4xl">verified</span>
+</div>
+<div class="flex flex-col gap-6">
+<span class="text-xs font-space-grotesk text-[#e2e2e8]/30 tracking-[0.4em] uppercase">Module_04</span>
+<h3 class="font-space-grotesk uppercase font-bold text-3xl md:text-4xl">RSA Notarization</h3>
+<p class="text-secondary text-sm font-space-grotesk uppercase tracking-widest">4096-bit Immutable Chain</p>
+<p class="text-[#e2e2e8]/70 text-lg leading-relaxed font-body">
+                    We attach an unbreakable chain of custody. Every analysis verdict and file hash is notarized using RSA-4096 Digital Signatures, ensuring forensic integrity for legal use.
+                </p>
+</div>
+</div>
+</section>
+<!-- Main Action CTA: Prominent at bottom -->
+<section class="min-h-screen flex flex-col items-center justify-center gap-16 py-32 reveal">
+<div class="text-center space-y-4">
+<h2 class="text-5xl font-black uppercase font-space-grotesk">Ready to Authenticate?</h2>
+<p class="text-[#e2e2e8]/40 font-space-grotesk tracking-widest text-sm uppercase">Secure node access required</p>
+</div>
+<div class="relative group">
+<div class="absolute -inset-1 bg-secondary rounded-none blur opacity-0 group-hover:opacity-40 transition duration-1000"></div>
+<a class="relative px-20 py-8 border-2 border-white bg-background/50 backdrop-blur-md hover:border-secondary hover:text-secondary transition-all duration-300 font-space-grotesk uppercase tracking-[0.3em] text-2xl font-black block" href="{% url 'upload' %}">
+                Initialize Scan Buffer
+            </a>
+</div>
+<!-- Dynamic Status Ticker -->
+<div class="w-full max-w-4xl bg-surface-container-lowest p-6 flex flex-col md:flex-row items-center justify-between border-l-8 border-secondary overflow-hidden gap-4">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 bg-secondary animate-pulse"></div>
+<span class="font-space-grotesk text-xs uppercase tracking-widest text-secondary font-bold">Neural Link Active</span>
+</div>
+<div class="flex gap-12 text-[#e2e2e8]/40 text-xs font-space-grotesk whitespace-nowrap uppercase tracking-tighter">
+<span>UPSTREAM: 4.2 GB/S</span>
+<span>NODE: 7741_X_DELTA</span>
+<span class="hidden lg:inline">BUFFER: CLEAN</span>
+<span>ENTROPY: 0.992</span>
+</div>
+</div>
+</section>
+<!-- Bottom Visual Anchor -->
+<div class="absolute bottom-0 left-0 w-full h-64 bg-gradient-to-t from-background to-transparent pointer-events-none"></div>
+</main>
+<!-- Decorative Forensic Nodes: Floating -->
+<div class="fixed bottom-12 right-12 flex flex-col gap-4 z-10 hidden xl:flex">
+<div class="glass-panel border border-white/10 p-4 bg-white/5 text-[10px] font-space-grotesk flex items-center gap-4 reveal active">
+<div class="w-2 h-2 bg-primary-container"></div>
+<div class="flex flex-col">
+<span class="text-[#e2e2e8]/80 uppercase font-bold">Anomalous Cluster</span>
+<span class="text-[#e2e2e8]/30">[44, 12, 09]</span>
+</div>
+</div>
+<div class="glass-panel border border-white/10 p-4 bg-white/5 text-[10px] font-space-grotesk flex items-center gap-4 reveal active delay-500">
+<div class="w-2 h-2 bg-secondary"></div>
+<div class="flex flex-col">
+<span class="text-[#e2e2e8]/80 uppercase font-bold">Verified Origin</span>
+<span class="text-[#e2e2e8]/30">[88, 01, 74]</span>
+</div>
+</div>
+</div>
+<script>
+    // Handle background movement
+    document.addEventListener('mousemove', (e) => {
+        const x = (e.clientX / window.innerWidth) * 100;
+        const y = (e.clientY / window.innerHeight) * 100;
+        document.documentElement.style.setProperty('--mouse-x', `${x}%`);
+        document.documentElement.style.setProperty('--mouse-y', `${y}%`);
+    });
+
+    // Handle scroll effects for background and fade-ins
+    window.addEventListener('scroll', () => {
+        const scrolled = window.pageYOffset;
+        
+        // Background transformation
+        const rotation = scrolled * 0.05;
+        const scale = 1 + (scrolled * 0.0002);
+        document.documentElement.style.setProperty('--scroll-rotation', `${rotation}deg`);
+        document.documentElement.style.setProperty('--scroll-scale', scale);
+
+        // Content reveal on scroll
+        const reveals = document.querySelectorAll('.reveal');
+        reveals.forEach(reveal => {
+            const windowHeight = window.innerHeight;
+            const revealTop = reveal.getBoundingClientRect().top;
+            const revealPoint = 150;
+
+            if (revealTop < windowHeight - revealPoint) {
+                reveal.classList.add('active');
+            }
+        });
+    });
+
+    // Initial check for visible items
+    window.dispatchEvent(new Event('scroll'));
+</script>
+</body></html>
