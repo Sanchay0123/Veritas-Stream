@@ -3,6 +3,8 @@ import subprocess
 import requests
 from PIL import Image # Moved to top for efficiency
 from django.conf import settings
+import exifread
+import os
 
 def sterilize_file(file_path, file_hash):
     """
@@ -64,3 +66,66 @@ def sterilize_file(file_path, file_hash):
     # --- ALL GATES CLEARED ---
     print("🏁 [Sterilizer] File cleared all security gates. Proceeding to AI Gauntlet.")
     return True, "CLEAN"
+
+
+
+
+def extract_deep_metadata(file_path):
+    """
+    🕵️‍♂️ Deep Metadata Scraper: Prioritizing AI Detection over Privacy Scrubbing.
+    """
+    metadata = {}
+    risk_flags = []
+    
+    try:
+        with open(file_path, 'rb') as f:
+            tags = exifread.process_file(f)
+            
+            # --- 🛡️ REFINED: AI vs. Social Media Logic ---
+            if not tags:
+                ext = file_path.lower().split('.')[-1]
+                if ext in ['jpg', 'jpeg']:
+                    # 🟡 Yellow Alert: Logic in reports.html looks for "SCRUBBED"
+                    risk_flags.append("SCRUBBED METADATA: Standard JPEG headers missing. Typical of WhatsApp/Discord compression.")
+                else:
+                    # 🔴 Red Alert: No "SCRUBBED" keyword, so template defaults to Red "Anomaly"
+                    risk_flags.append("SYNTHETIC SIGNATURE: Total absence of forensic headers in a non-JPEG container. High possibility of AI generation (Gemini/Midjourney).")
+            
+            if tags:
+                # 1. THE HARDWARE FINGERPRINT
+                metadata['Make'] = str(tags.get('Image Make', 'Unknown'))
+                metadata['Model'] = str(tags.get('Image Model', 'Unknown'))
+                metadata['Software'] = str(tags.get('Image Software', 'None Detected'))
+                
+                # 🚨 RED FLAG: Software Manipulation
+                software_blacklist = ['photoshop', 'gimp', 'picsart', 'midjourney', 'stable diffusion', 'dall-e']
+                software_lower = metadata['Software'].lower()
+                
+                if any(s in software_lower for s in software_blacklist):
+                    risk_flags.append(f"MANIPULATION TRACE: File edited via {metadata['Software']}")
+                
+                # 🚨 Specific Check: Outdated/Suspect Software
+                if 'picasa' in software_lower:
+                    risk_flags.append("LEGACY SOFTWARE: Use of Picasa detected. Highly unusual for modern captures; often used in AI-upscaling or legacy re-encoding.")
+
+                # 2. THE TEMPORAL TRAP (Timestamps)
+                metadata['DateTaken'] = str(tags.get('EXIF DateTimeOriginal', 'N/A'))
+                metadata['DateDigitized'] = str(tags.get('EXIF DateTimeDigitized', 'N/A'))
+                
+                if metadata['DateTaken'] != 'N/A' and metadata['DateDigitized'] != 'N/A':
+                    if metadata['DateTaken'] != metadata['DateDigitized']:
+                        risk_flags.append("TEMPORAL ANOMALY: Creation and Digitization dates do not match.")
+
+                # 3. GPS SURVEILLANCE
+                has_gps = any('GPS' in key for key in tags.keys())
+                metadata['Geotagged'] = "Yes" if has_gps else "No"
+                if has_gps:
+                    risk_flags.append("LOCATION DATA: This image contains embedded GPS coordinates.")
+            else:
+                metadata['Header Status'] = "No metadata found in the bitstream."
+
+    except Exception as e:
+        print(f"⚠️ Metadata Extraction Error: {e}")
+        return {"error": "Failed to parse EXIF data."}, []
+
+    return metadata, risk_flags

@@ -3,11 +3,13 @@ from django.urls import path, re_path
 from django.conf import settings
 from django.views.static import serve
 from apps.forensics.views import upload_and_analyze
+from apps.forensics import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),  
     path('upload/', upload_and_analyze, name='upload'),
-    path('', upload_and_analyze, name='home'), 
+    path('', upload_and_analyze, name='home'),
+    path('report/<uuid:report_id>/export/', views.export_pdf_report, name='export_pdf'),
 ]
 
 # 🔓 THE FIX: Force Django to serve static and media files through the tunnel
