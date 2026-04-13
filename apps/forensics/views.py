@@ -63,13 +63,10 @@ def upload_and_analyze(request):
 
             try:
                 # 🛡️ STEP 1.5: MALWARE STERILIZATION (The Iron Curtain)
-                # We generate the hash early to check VirusTotal and Duplicates
                 temp_hash = engine.get_file_hash(quarantine_path)
-                
                 is_safe, security_msg = sterilize_file(quarantine_path, temp_hash)
                 
                 if not is_safe:
-                    # Instant Nuke: Remove malicious/malformed file
                     if os.path.exists(quarantine_path):
                         os.remove(quarantine_path)
                     
@@ -79,22 +76,21 @@ def upload_and_analyze(request):
                         'error': security_msg 
                     })
 
-                # 2. Duplicate Detection (Proceeds only if file is CLEAN)
+                # 2. Duplicate Detection
                 file_hash = temp_hash
                 existing_report = ForensicReport.objects.filter(sha256_hash=file_hash).first()
                 
                 if existing_report:
-                    # Clean up the upload; we already have this data
                     if os.path.exists(quarantine_path):
                         os.remove(quarantine_path) 
                     
                     final_image_url = get_guaranteed_url(existing_report.vault_path, existing_report.file_name)
 
-                    # 🕵️‍♂️ Extract Metadata for the existing archived file
+                    # 🕵️‍♂️ UPDATED: Unpack 3 values (metadata, risk_tags, info_flags)
                     abs_vault_path = os.path.join(settings.MEDIA_ROOT, str(existing_report.vault_path))
-                    meta_data, risk_tags = extract_deep_metadata(abs_vault_path)
+                    meta_data, risk_tags, info_flags = extract_deep_metadata(abs_vault_path)
 
-                    # Verify RSA Signature to ensure no one manually changed the DB score
+                    # Verify RSA Signature... [Logic remains same]
                     try:
                         is_valid = engine.verify_signature(
                             existing_report.sha256_hash, 
@@ -126,17 +122,19 @@ def upload_and_analyze(request):
                         'is_fake': is_fake,
                         'image_url': final_image_url,
                         'metadata': meta_data,
-                        'risk_tags': risk_tags
+                        'risk_tags': risk_tags,
+                        'info_flags': info_flags  # 👈 Added to context
                     })
 
                 # 3. Execute Pipeline (AI Gauntlet + Move to Vault)
                 result = engine.execute_full_pipeline(quarantine_path)
 
                 # 🛡️ 3.5: Deep Metadata Extraction (Post-Vault Move)
+                # UPDATED: Unpack 3 values
                 abs_vault_path = os.path.join(settings.MEDIA_ROOT, result['vault_location'])
-                meta_data, risk_tags = extract_deep_metadata(abs_vault_path)
+                meta_data, risk_tags, info_flags = extract_deep_metadata(abs_vault_path)
 
-                # 4. Save New Report to Database
+                # 4. Save New Report
                 report, created = ForensicReport.objects.get_or_create(
                     sha256_hash=result['hash'],
                     defaults={
@@ -160,7 +158,8 @@ def upload_and_analyze(request):
                     'is_fake': is_fake,
                     'image_url': final_image_url,
                     'metadata': meta_data,
-                    'risk_tags': risk_tags
+                    'risk_tags': risk_tags,
+                    'info_flags': info_flags  # 👈 Added to context
                 })
 
             except Exception as e:
@@ -172,7 +171,6 @@ def upload_and_analyze(request):
 
     return render(request, 'forensics/upload.html', {'form': form})
 
-
 def export_pdf_report(request, report_id):
     """
     📄 The Notarizer: Generates a tamper-proof PDF forensic report.
@@ -180,14 +178,15 @@ def export_pdf_report(request, report_id):
     try:
         report = ForensicReport.objects.get(id=report_id)
         
-        # Re-extract metadata for the PDF context
+        # 🕵️‍♂️ UPDATED: Unpack 3 values to prevent ValueError
         abs_path = os.path.join(settings.MEDIA_ROOT, str(report.vault_path))
-        metadata, risk_tags = extract_deep_metadata(abs_path)
+        metadata, risk_tags, info_flags = extract_deep_metadata(abs_path)
         
         context = {
             'report': report,
             'metadata': metadata,
             'risk_tags': risk_tags,
+            'info_flags': info_flags, # 👈 Passed to PDF template
             'verdict': 'AI GENERATED' if report.ai_confidence_score >= 0.5 else 'AUTHENTIC',
             'confidence': f"{report.ai_confidence_score * 100:.1f}%",
             'analysis_date': timezone.now().strftime("%Y-%m-%d %H:%M:%S %Z"),
@@ -198,12 +197,10 @@ def export_pdf_report(request, report_id):
         html = template.render(context)
         result = BytesIO()
         
-        # The pisaDocument function does the heavy lifting
         pdf = pisa.pisaDocument(BytesIO(html.encode("UTF-8")), result)
         
         if not pdf.err:
             response = HttpResponse(result.getvalue(), content_type='application/pdf')
-            # 'attachment' forces the browser to download it
             response['Content-Disposition'] = f'attachment; filename="Veritas_Forensic_Report_{report.id}.pdf"'
             return response
         

@@ -76,6 +76,7 @@ def extract_deep_metadata(file_path):
     """
     metadata = {}
     risk_flags = []
+    info_flags = []
     
     try:
         with open(file_path, 'rb') as f:
@@ -120,7 +121,7 @@ def extract_deep_metadata(file_path):
                 has_gps = any('GPS' in key for key in tags.keys())
                 metadata['Geotagged'] = "Yes" if has_gps else "No"
                 if has_gps:
-                    risk_flags.append("LOCATION DATA: This image contains embedded GPS coordinates.")
+                    info_flags.append("LOCATION DATA: This image contains embedded GPS coordinates.")
             else:
                 metadata['Header Status'] = "No metadata found in the bitstream."
 
@@ -128,4 +129,4 @@ def extract_deep_metadata(file_path):
         print(f"⚠️ Metadata Extraction Error: {e}")
         return {"error": "Failed to parse EXIF data."}, []
 
-    return metadata, risk_flags
+    return metadata, risk_flags, info_flags

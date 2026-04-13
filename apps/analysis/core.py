@@ -1,9 +1,11 @@
 import os
 import io
 import torch
+import gc
 from PIL import Image, ImageChops, ImageEnhance, ImageStat
 from facenet_pytorch import MTCNN
 from transformers import pipeline
+
 
 class EnterpriseDeepFakeDetector:
     def __init__(self):
@@ -14,10 +16,9 @@ class EnterpriseDeepFakeDetector:
         self.face_detector = MTCNN(keep_all=True, device=self.device, post_process=False, margin=0, thresholds=[0.5, 0.6, 0.6])
         
         print("⏳ Loading Expert 1 (GANs)...")
-        self.gan_detector = pipeline("image-classification", model="dima806/deepfake_vs_real_image_detection", device=0 if torch.cuda.is_available() else -1)
-        
+        self.gan_detector = pipeline("image-classification",model="dima806/deepfake_vs_real_image_detection",device=0 if torch.cuda.is_available() else -1)        
         print("⏳ Loading Expert 2 (Diffusions)...")
-        self.diffusion_detector = pipeline("image-classification", model="umm-maybe/AI-image-detector", device=0 if torch.cuda.is_available() else -1)
+        self.diffusion_detector = pipeline("image-classification", model="Organika/sdxl-detector", device=0 if torch.cuda.is_available() else -1)
         print("✅ Ultimate Brain Loaded")
 
     def _scan_metadata(self, img):
@@ -36,31 +37,60 @@ class EnterpriseDeepFakeDetector:
         return 0.0
 
     def _generate_ela(self, img):
-        """Calculates the Error Level Analysis variance."""
-        print("   [Stage 1: Forensic Math] Running Error Level Analysis...")
+        """Calculates the Error Level Analysis variance with calibrated thresholds."""
+        print("   [Stage 1: Forensic Math] Running Error Level Analysis...")
         
-        # 1. Save temporary compressed version
         temp_io = io.BytesIO()
         img.save(temp_io, 'JPEG', quality=90)
         temp_io.seek(0)
         compressed_img = Image.open(temp_io)
         
-        # 2. Calculate pixel difference
         ela_map = ImageChops.difference(img, compressed_img)
         
-        # 3. Enhance brightness to see the hidden noise
         extrema = ela_map.getextrema()
         max_diff = max([ex[1] for ex in extrema]) if extrema else 1
         if max_diff == 0: max_diff = 1
         scale = 255.0 / max_diff
         ela_map = ImageEnhance.Brightness(ela_map).enhance(scale)
         
-        # 4. Statistical Variance (AI images are usually very low variance/too clean)
         stat = ImageStat.Stat(ela_map)
         variance = sum(stat.var) / len(stat.var)
         
-        print(f"      -> ELA Noise Variance: {variance:.2f}")
+        # --- 🧪 RECALIBRATED INTERPRETATION ---
+        # ISO noise in real photos often hits 60. We only flag extremes now.
+        status = "NOMINAL"
+        if variance > 150: 
+            status = "ANOMALOUS HIGH (Possible Splicing)"
+        elif variance < 5: 
+            status = "ANOMALOUS LOW (Pure Synthetic/Too Clean)"
+        
+        print(f"      -> ELA Status: {status} (Variance: {variance:.2f})")
         return variance
+
+    def _run_ensemble(self, img, stage_name, ela_variance=0): # 👈 Added ela_variance
+        s1 = self._extract_score(self.gan_detector(img))
+        s2 = self._extract_score(self.diffusion_detector(img))
+        
+        raw_max = max(s1, s2)
+        raw_min = min(s1, s2)
+        
+        if raw_max >= 0.50 and raw_min < 0.50:
+            # 🚨 THE FORENSIC VETO 🚨
+            # If the neural networks are hung, check the hard math!
+            # If Diffusion is screaming (>80%) AND ELA variance is extremely high (>150), it's a deepfake.
+            if raw_max >= 0.80 and ela_variance > 150:
+                final_score = raw_max
+                print(f"   [{stage_name}] 🚨 FORENSIC VETO: ELA Math confirms anomaly. Overruling Acquittal. (GAN: {s1*100:.0f}%, Diff: {s2*100:.0f}%)")
+            else:
+                # ⚖️ Normal Weighted Acquittal (For actual real HDR photos)
+                organic_score = (raw_min * 0.6) + (raw_max * 0.4)
+                final_score = min(0.49, organic_score)
+                print(f"   [{stage_name}] ⚖️ Hung Jury. Weighted Acquittal to {final_score * 100:.2f}% (GAN: {s1*100:.0f}%, Diff: {s2*100:.0f}%)")
+        else:
+            final_score = raw_max
+            
+        print(f"   [{stage_name}] Ensemble Score: {final_score * 100:.2f}%")
+        return final_score
 
     def make_ffhq_crop(self, img, box):
         width, height = img.size
@@ -86,12 +116,6 @@ class EnterpriseDeepFakeDetector:
             return 1.0 - hf_output[0]['score']
         return 0.0
 
-    def _run_ensemble(self, img, stage_name):
-        score_1 = self._extract_score(self.gan_detector(img))
-        score_2 = self._extract_score(self.diffusion_detector(img))
-        final_score = max(score_1, score_2)
-        print(f"   [{stage_name}] Ensemble Score: {final_score * 100:.2f}% (GAN: {score_1*100:.0f}%, Diff: {score_2*100:.0f}%)")
-        return final_score
 
     def analyze(self, image_path):
         try:
@@ -107,41 +131,63 @@ class EnterpriseDeepFakeDetector:
                 return 1.0
 
             # STAGE 1: FORENSIC MATH (ELA)
-            # Keeping ELA active for raw/uncompressed dataset testing!
             ela_variance = self._generate_ela(full_image)
 
             # STAGE 2: FULL CONTEXT
-            scores.append(self._run_ensemble(full_image, "Stage 2: Full Context"))
+            # 👈 Injecting ELA Variance for the Forensic Veto
+            scores.append(self._run_ensemble(full_image, "Stage 2: Full Context", ela_variance))
 
             # STAGE 3: WATERMARK HUNTER
             corner_crop = full_image.crop((int(width * 0.85), int(height * 0.85), width, height))
-            scores.append(self._run_ensemble(corner_crop, "Stage 3: Watermark Hunter"))
+            # 👈 Injecting ELA Variance for the Forensic Veto
+            scores.append(self._run_ensemble(corner_crop, "Stage 3: Watermark Hunter", ela_variance))
 
             # STAGE 4: FACE HUNTER
             boxes, _ = self.face_detector.detect(full_image)
             if boxes is not None:
                 for i, box in enumerate(boxes):
                     face_crop = self.make_ffhq_crop(full_image, box)
-                    scores.append(self._run_ensemble(face_crop, f"Stage 4: Face Crop {i+1}"))
+                    # 👈 Injecting ELA Variance for the Forensic Veto
+                    scores.append(self._run_ensemble(face_crop, f"Stage 4: Face Crop {i+1}", ela_variance))
             else:
                 print("   [Face Hunter] ⚠️ No faces detected.")
 
-            # 🧠 THE BIG BRAIN FIX: Heuristic Threat Amplification
-            # Count how many stages are showing "mild" suspicion (>= 25%)
-            suspicious_stages = [s for s in scores if s >= 0.25]
-            raw_max = max(scores)
+            # 🧠 THE BIG BRAIN FIX: The Contextual Anchor
+            # scores[0] is always "Stage 2: Full Context"
+            # scores[1] is "Watermark"
+            # scores[2:] are the "Face Crops"
             
-            if len(suspicious_stages) >= 2 and raw_max < 0.50:
-                print(f"   🔍 [Heuristic] {len(suspicious_stages)} stages report systemic suspicion. Amplifying threat score!")
-                final_score = min(0.99, raw_max * 1.5) # Apply a 1.5x Multiplier
+            full_context_score = scores[0]
+            sub_scores = scores[1:]
+            
+            if sub_scores:
+                highest_sub_score = max(sub_scores)
+                
+                # ⚖️ Anchor the highest local anomaly to the global context.
+                if highest_sub_score > full_context_score:
+                    # Pull the high crop score down using the clean full context
+                    final_score = (full_context_score * 0.5) + (highest_sub_score * 0.5)
+                else:
+                    final_score = full_context_score
             else:
-                final_score = raw_max
+                final_score = full_context_score
+
+            # 🧹 THE VRAM VACUUM
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                import gc
+                gc.collect()
 
             print(f"🚩 FINAL PIPELINE SCORE: {final_score * 100:.2f}% Fake\n")
             return final_score
 
         except Exception as e:
             print(f"❌ Analysis Failed: {e}")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                import gc
+                gc.collect()
             return 0.0
+
 
 DeepFakeDetector = EnterpriseDeepFakeDetector
