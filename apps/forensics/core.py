@@ -10,6 +10,9 @@ from cryptography.hazmat.primitives import serialization
 from django.conf import settings
 from django.utils import timezone
 
+# 🔬 NEW: Added Pillow imports for Forensic ELA Math
+from PIL import Image, ImageChops, ImageEnhance
+
 # Import the AI Brain
 from apps.analysis.core import DeepFakeDetector 
 
@@ -100,7 +103,6 @@ class VeritasForensicEngine:
 
         try:
             # 1. Reconstruct the EXACT string used during signing
-            # Note: Ensure the formatting matches sign_report exactly
             data_to_verify = f"Hash:{file_hash}|Result:{ai_confidence}"
             
             # 2. Load Public Key from your Private Key
@@ -155,6 +157,51 @@ class VeritasForensicEngine:
 
         return vault_path
 
+    def generate_ela_heatmap(self, image_path, output_dir, quality=90, multiplier=15):
+        """
+        🔬 The Visual Veto: Generates an ELA heatmap to visualize compression artifacts.
+        """
+        try:
+            original = Image.open(image_path).convert('RGB')
+            
+            # STEP 1: The Resave
+            temp_filename = os.path.join(output_dir, "temp_ela_buffer.jpg")
+            original.save(temp_filename, 'JPEG', quality=quality)
+            compressed = Image.open(temp_filename)
+            
+            # STEP 2: The Subtraction
+            diff = ImageChops.difference(original, compressed)
+            
+            # STEP 3: The Amplification
+            extrema = diff.getextrema()
+            max_diff = max([ex[1] for ex in extrema])
+            if max_diff == 0:
+                max_diff = 1 
+                
+            enhancer = ImageEnhance.Brightness(diff)
+            heatmap = enhancer.enhance(multiplier)
+            
+            # STEP 4: Save to the Vault next to the original
+            base_name = os.path.basename(image_path)
+            heatmap_filename = f"ELA_{base_name}"
+            heatmap_path = os.path.join(output_dir, heatmap_filename)
+            
+            heatmap.save(heatmap_path, 'JPEG', quality=100)
+            
+            # 🧹 Cleanup
+            compressed.close()
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
+                
+            print(f"   [Forensic Math] 🗺️ ELA Heatmap generated: {heatmap_filename}")
+            
+            # Return the relative path so Django can serve it easily via /media/
+            return heatmap_path
+            
+        except Exception as e:
+            print(f"❌ [Forensic Math] ELA Heatmap Generation Failed: {e}")
+            return None
+
     def execute_full_pipeline(self, input_path):
         """The Big Red Button"""
         file_hash = self.get_file_hash(input_path)
@@ -163,11 +210,27 @@ class VeritasForensicEngine:
         report_summary = f"Hash:{file_hash}|Result:{analysis['ai_confidence']}"
         signature = self.sign_report(report_summary)
         
+        # Move the clean file to the Vault FIRST
         vault_path = self.archive_to_vault(input_path)
+        
+        # 🗺️ Generate the ELA Heatmap directly in the Vault directory
+        vault_dir = os.path.dirname(vault_path)
+        
+        # Only attempt ELA on images (skip videos for now to save processing time)
+        ela_path = None
+        if vault_path.lower().endswith(('.jpg', '.png', '.jpeg')):
+            ela_path = self.generate_ela_heatmap(vault_path, vault_dir)
+        
+        # Extract just the relative portion starting from 'vault/' so it works with your URLs
+        if ela_path:
+            ela_rel_path = 'vault/' + ela_path.split('vault/')[-1]
+        else:
+            ela_rel_path = None
         
         return {
             "hash": file_hash,
             "signature": signature,
             "vault_location": vault_path,
+            "ela_heatmap": ela_rel_path,  # 👈 Now available for your views.py to pass to the UI
             "analysis": analysis
         }

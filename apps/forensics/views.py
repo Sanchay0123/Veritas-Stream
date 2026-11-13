@@ -1,5 +1,6 @@
 import os
 import re
+import boto3
 from django.shortcuts import render, redirect
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
@@ -86,11 +87,23 @@ def upload_and_analyze(request):
                     
                     final_image_url = get_guaranteed_url(existing_report.vault_path, existing_report.file_name)
 
-                    # 🕵️‍♂️ UPDATED: Unpack 3 values (metadata, risk_tags, info_flags)
+                    # 🕵️‍♂️ Unpack 3 values (metadata, risk_tags, info_flags)
                     abs_vault_path = os.path.join(settings.MEDIA_ROOT, str(existing_report.vault_path))
                     meta_data, risk_tags, info_flags = extract_deep_metadata(abs_vault_path)
 
-                    # Verify RSA Signature... [Logic remains same]
+                    # 🗺️ NEW: Hunt for the historical ELA Heatmap
+                    historical_ela_url = None
+                    expected_ela_filename = f"ELA_{existing_report.file_name}"
+                    expected_ela_path = os.path.join(os.path.dirname(abs_vault_path), expected_ela_filename)
+                    
+                    if os.path.exists(expected_ela_path):
+                        raw_dir = str(existing_report.vault_path).replace('\\', '/')
+                        if 'vault/' in raw_dir:
+                            rel_dir = 'vault/' + raw_dir.split('vault/')[-1]
+                            rel_dir = os.path.dirname(rel_dir)
+                            historical_ela_url = f"/media/{rel_dir}/{expected_ela_filename}"
+
+                    # Verify RSA Signature
                     try:
                         is_valid = engine.verify_signature(
                             existing_report.sha256_hash, 
@@ -121,16 +134,16 @@ def upload_and_analyze(request):
                         'confidence': f"{score * 100:.1f}%",
                         'is_fake': is_fake,
                         'image_url': final_image_url,
+                        'ela_heatmap_url': historical_ela_url, # 👈 Added ELA to historical duplicates
                         'metadata': meta_data,
                         'risk_tags': risk_tags,
-                        'info_flags': info_flags  # 👈 Added to context
+                        'info_flags': info_flags 
                     })
 
                 # 3. Execute Pipeline (AI Gauntlet + Move to Vault)
                 result = engine.execute_full_pipeline(quarantine_path)
 
                 # 🛡️ 3.5: Deep Metadata Extraction (Post-Vault Move)
-                # UPDATED: Unpack 3 values
                 abs_vault_path = os.path.join(settings.MEDIA_ROOT, result['vault_location'])
                 meta_data, risk_tags, info_flags = extract_deep_metadata(abs_vault_path)
 
@@ -145,10 +158,20 @@ def upload_and_analyze(request):
                     }
                 )
 
+                # Comment out if s3 is inactive
+                # ☁️ STEP 4.5: THE REDUNDANT MIRROR (AWS S3 Backup)
+                abs_vault_path = os.path.join(settings.MEDIA_ROOT, str(report.vault_path))
+                backup_to_s3(abs_vault_path, report.file_name)
+
                 # 5. Final UI Translation
                 score = report.ai_confidence_score
                 is_fake = score >= 0.50
                 final_image_url = get_guaranteed_url(report.vault_path, report.file_name)
+
+                # 🗺️ Format the ELA Heatmap URL for the frontend
+                ela_heatmap_url = None
+                if result.get('ela_heatmap'):
+                    ela_heatmap_url = f"/media/{result['ela_heatmap']}"
 
                 return render(request, 'forensics/report.html', {
                     'status': 'Success',
@@ -157,9 +180,10 @@ def upload_and_analyze(request):
                     'confidence': f"{score * 100:.1f}%",
                     'is_fake': is_fake,
                     'image_url': final_image_url,
+                    'ela_heatmap_url': ela_heatmap_url,
                     'metadata': meta_data,
                     'risk_tags': risk_tags,
-                    'info_flags': info_flags  # 👈 Added to context
+                    'info_flags': info_flags 
                 })
 
             except Exception as e:
@@ -171,6 +195,26 @@ def upload_and_analyze(request):
 
     return render(request, 'forensics/upload.html', {'form': form})
 
+
+def backup_to_s3(local_vault_path, s3_file_name):
+    """
+    ☁️ The Redundant Mirror: Copies the clean file to AWS S3 (Learner's Lab Edition)
+    """
+    try:
+        s3 = boto3.client(
+            's3', 
+            region_name=settings.AWS_S3_REGION_NAME,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID, 
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            aws_session_token=settings.AWS_SESSION_TOKEN  
+        )
+                          
+        s3.upload_file(local_vault_path, settings.AWS_STORAGE_BUCKET_NAME, s3_file_name)
+        print(f"☁️ [Backup] Successfully mirrored {s3_file_name} to AWS S3.")
+        
+    except Exception as e:
+        print(f"⚠️ [Backup Warning] S3 Mirror failed: {e}. File is safe locally.")
+
 def export_pdf_report(request, report_id):
     """
     📄 The Notarizer: Generates a tamper-proof PDF forensic report.
@@ -178,7 +222,7 @@ def export_pdf_report(request, report_id):
     try:
         report = ForensicReport.objects.get(id=report_id)
         
-        # 🕵️‍♂️ UPDATED: Unpack 3 values to prevent ValueError
+        # 🕵️‍♂️ Unpack 3 values to prevent ValueError
         abs_path = os.path.join(settings.MEDIA_ROOT, str(report.vault_path))
         metadata, risk_tags, info_flags = extract_deep_metadata(abs_path)
         
@@ -186,7 +230,7 @@ def export_pdf_report(request, report_id):
             'report': report,
             'metadata': metadata,
             'risk_tags': risk_tags,
-            'info_flags': info_flags, # 👈 Passed to PDF template
+            'info_flags': info_flags,
             'verdict': 'AI GENERATED' if report.ai_confidence_score >= 0.5 else 'AUTHENTIC',
             'confidence': f"{report.ai_confidence_score * 100:.1f}%",
             'analysis_date': timezone.now().strftime("%Y-%m-%d %H:%M:%S %Z"),
