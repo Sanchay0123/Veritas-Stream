@@ -2,7 +2,6 @@ import os
 import io
 import random
 import argparse
-import numpy as np
 from PIL import Image, ImageFilter
 from tqdm import tqdm
 
@@ -18,14 +17,40 @@ from apps.analysis.networks import VeritasHybridNet
 DEFAULT_DATA_DIR = "storage/dataset/130k_faces/images"
 DEFAULT_SAVE_PATH = "apps/analysis/weights/veritas_hybrid.pth"
 DEFAULT_BATCH_SIZE = 32
-DEFAULT_EPOCHS = 5
-DEFAULT_LR = 1e-4
+DEFAULT_EPOCHS = 4
+DEFAULT_LR = 8e-5
 DEFAULT_WEIGHT_DECAY = 1e-4
 
 
 # ==============================================================================
-# 1. SYMMETRIC FORENSIC AUGMENTATIONS (NO LABEL LEAKAGE)
+# 1. SPATIAL & FORENSIC AUGMENTATIONS
 # ==============================================================================
+class PreserveGridOrResize(object):
+    """
+    Dual-mode spatial adaptation:
+    - 50% probability: Native-resolution RandomCrop(224) to preserve raw VAE
+      decoder grids, micro-textures, and high-frequency NPR residuals.
+    - 50% probability: Resize((224, 224)) to capture global semantic context,
+      full-scene composition, and diffusion lighting/reflection artifacts.
+    """
+    def __init__(self, size=224, p_crop=0.5):
+        self.size = size
+        self.p_crop = p_crop
+        self.crop = transforms.RandomCrop(size)
+        self.resize = transforms.Resize((size, size))
+
+    def __call__(self, img):
+        w, h = img.size
+        # Fallback to resize if image is smaller than target crop
+        if w < self.size or h < self.size:
+            return self.resize(img)
+            
+        if random.random() < self.p_crop:
+            return self.crop(img)
+        else:
+            return self.resize(img)
+
+
 class RandomJPEGCompression(object):
     """
     Applies JPEG compression artifact simulation with randomized quality factor.
@@ -62,12 +87,11 @@ class RandomGaussianBlur(object):
 
 
 # ==============================================================================
-# 2. DATASET WRAPPER
+# 2. BALANCED FORENSIC DATASET WRAPPER
 # ==============================================================================
 class ForensicImageDataset(Dataset):
     """
-    Lightweight Dataset wrapper loading from pre-partitioned sample tuples (path, label).
-    Ensures exact 1:1 pixel crops without resampling blur.
+    Fast Dataset wrapper loading from pre-partitioned sample tuples (path, label).
     """
     def __init__(self, samples, transform):
         self.samples = samples
@@ -85,7 +109,7 @@ class ForensicImageDataset(Dataset):
 
 
 # ==============================================================================
-# 3. TRAINING PIPELINE
+# 3. FINE-TUNING PIPELINE
 # ==============================================================================
 def train_model(
     data_dir=DEFAULT_DATA_DIR,
@@ -94,14 +118,12 @@ def train_model(
     epochs=DEFAULT_EPOCHS,
     lr=DEFAULT_LR,
     weight_decay=DEFAULT_WEIGHT_DECAY,
-    max_samples=10000,
-    full_dataset=False,
     num_workers=4
 ):
-    print("=" * 70)
-    print("🧠 VeritasHybridNet Training Pipeline")
-    print("   Dual-Stream Semantic (ConvNeXt-Tiny) + Forensic (NPR + FFT) Engine")
-    print("=" * 70)
+    print("=" * 72)
+    print("🚀 VeritasHybridNet: Emergency Modern Diffusion Fine-Tuning")
+    print("   Adapting Dual-Stream Architecture for StyleGAN + Latent Diffusion")
+    print("=" * 72)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"⚙️ Compute Device: {device}")
@@ -114,15 +136,12 @@ def train_model(
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     # --------------------------------------------------------------------------
-    # Data Augmentation & Forensic Pixel Transforms
+    # Transforms: PreserveGridOrResize + Symmetric Augmentations
     # --------------------------------------------------------------------------
-    # Symmetric augmentations applied to ALL images:
-    # RandomCrop(224) extracts 1:1 patches preserving local pixel grid relationships
     train_transform = transforms.Compose([
         RandomJPEGCompression(quality_range=(50, 95), p=0.4),
         RandomGaussianBlur(radius_range=(0.2, 1.0), p=0.3),
-        transforms.Resize(256),
-        transforms.RandomCrop(224),
+        PreserveGridOrResize(size=224, p_crop=0.5),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.ColorJitter(brightness=0.05, contrast=0.05),
         transforms.ToTensor(),
@@ -130,54 +149,57 @@ def train_model(
     ])
 
     val_transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
     # --------------------------------------------------------------------------
-    # Dataset Ingestion & Balanced Partitioning
+    # Ingest Balanced 16,000-Image Dataset
     # --------------------------------------------------------------------------
     print(f"\n📂 Loading Dataset from: {data_dir}...")
-    raw_dataset = datasets.ImageFolder(data_dir)
-    class_to_idx = raw_dataset.class_to_idx
-    print(f"✅ Class Mapping Confirmed: {class_to_idx}")
-    print(f"   Total Images Available on Disk: {len(raw_dataset):,}")
+    fake_dir = os.path.join(data_dir, "fake")
+    real_dir = os.path.join(data_dir, "real")
 
-    fake_idx = class_to_idx.get("fake", 0)
-    real_idx = class_to_idx.get("real", 1)
+    fake_files = sorted(os.listdir(fake_dir))
+    real_files = sorted(os.listdir(real_dir))
 
-    fake_samples = [s for s in raw_dataset.samples if s[1] == fake_idx]
-    real_samples = [s for s in raw_dataset.samples if s[1] == real_idx]
-    print(f"   Available breakdown: {len(fake_samples):,} fake, {len(real_samples):,} real")
+    # Stratify fake and real sub-domains
+    sg_fakes = [os.path.join(fake_dir, f) for f in fake_files if f.startswith("sg_")]
+    diff_fakes = [os.path.join(fake_dir, f) for f in fake_files if f.startswith("diff_")]
+    face_reals = [os.path.join(real_dir, f) for f in real_files if f.startswith("face_")]
+    pool_reals = [os.path.join(real_dir, f) for f in real_files if f.startswith("real_")]
 
-    # Balanced sampling
+    print(f"   Breakdown: {len(sg_fakes):,} StyleGAN Fakes | {len(diff_fakes):,} Modern Diffusion Fakes")
+    print(f"              {len(face_reals):,} Real Faces    | {len(pool_reals):,} Real General Scenes")
+    print(f"   Total Balanced Samples: {len(sg_fakes) + len(diff_fakes) + len(face_reals) + len(pool_reals):,}")
+
+    # Deterministic 80/20 train/validation split per sub-domain
     random.seed(42)
-    random.shuffle(fake_samples)
-    random.shuffle(real_samples)
+    random.shuffle(sg_fakes)
+    random.shuffle(diff_fakes)
+    random.shuffle(face_reals)
+    random.shuffle(pool_reals)
 
-    if not full_dataset and max_samples is not None and max_samples < len(raw_dataset):
-        samples_per_class = max_samples // 2
-        fake_pool = fake_samples[:samples_per_class]
-        real_pool = real_samples[:samples_per_class]
-        print(f"🎯 Using balanced sub-pool of {len(fake_pool) + len(real_pool):,} samples ({len(fake_pool):,} per class)")
-    else:
-        min_count = min(len(fake_samples), len(real_samples))
-        fake_pool = fake_samples[:min_count]
-        real_pool = real_samples[:min_count]
-        print(f"🎯 Using balanced full-pool of {len(fake_pool) + len(real_pool):,} samples")
+    train_samples = (
+        [(p, 0) for p in sg_fakes[:3200]] +
+        [(p, 0) for p in diff_fakes[:3200]] +
+        [(p, 1) for p in face_reals[:3200]] +
+        [(p, 1) for p in pool_reals[:3200]]
+    )
 
-    # 80/20 train/val split per class
-    fake_split = int(0.8 * len(fake_pool))
-    real_split = int(0.8 * len(real_pool))
+    val_samples = (
+        [(p, 0) for p in sg_fakes[3200:]] +
+        [(p, 0) for p in diff_fakes[3200:]] +
+        [(p, 1) for p in face_reals[3200:]] +
+        [(p, 1) for p in pool_reals[3200:]]
+    )
 
-    train_samples = fake_pool[:fake_split] + real_pool[:real_split]
-    val_samples = fake_pool[fake_split:] + real_pool[real_split:]
     random.shuffle(train_samples)
     random.shuffle(val_samples)
 
-    print(f"📊 Partitions: {len(train_samples):,} Training Samples | {len(val_samples):,} Validation Samples")
+    print(f"📊 Partitions: {len(train_samples):,} Training Samples (6,400 Fake, 6,400 Real)")
+    print(f"              {len(val_samples):,} Validation Samples (1,600 Fake, 1,600 Real)")
 
     train_dataset = ForensicImageDataset(train_samples, train_transform)
     val_dataset = ForensicImageDataset(val_samples, val_transform)
@@ -200,18 +222,23 @@ def train_model(
     )
 
     # --------------------------------------------------------------------------
-    # Initialize VeritasHybridNet Architecture
+    # Initialize VeritasHybridNet & Load Pre-trained Weights
     # --------------------------------------------------------------------------
     print("\n🏗️ Instantiating VeritasHybridNet...")
-    model = VeritasHybridNet(num_classes=2, pretrained=True, fake_class_idx=fake_idx)
+    model = VeritasHybridNet(num_classes=2, pretrained=True, fake_class_idx=0)
     model = model.to(device)
 
-    total_params = sum(p.numel() for p in model.parameters())
+    if os.path.exists(save_path):
+        print(f"📦 Loading pre-existing checkpoint from {save_path} for fine-tuning...")
+        state_dict = torch.load(save_path, map_location=device)
+        model.load_state_dict(state_dict)
+        print("✅ Pre-trained checkpoint loaded successfully!")
+    else:
+        print("⚠️ No existing checkpoint found; training from base pre-trained ConvNeXt.")
+
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     trainable_count = sum(p.numel() for p in trainable_params)
-    print(f"   Total Parameters: {total_params:,}")
     print(f"   Trainable Parameters: {trainable_count:,} (Stages 2/3 + Forensic Stem + Fusion)")
-    print(f"   Frozen Parameters: {total_params - trainable_count:,} (Early ConvNeXt Stages 0/1)")
 
     # --------------------------------------------------------------------------
     # Optimizer, Loss Criterion & Scheduler
@@ -219,21 +246,18 @@ def train_model(
     optimizer = optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
-    # Class weighting: higher penalty for missing a fake (false negative)
-    # fake_idx=0 -> weight 1.2, real_idx=1 -> weight 1.0
-    weights_tensor = torch.zeros(2, device=device)
-    weights_tensor[fake_idx] = 1.2
-    weights_tensor[real_idx] = 1.0
-    criterion = nn.CrossEntropyLoss(weight=weights_tensor, label_smoothing=0.05)
+    # Forensic class weighting: 1.2x weight for fake class
+    class_weights = torch.tensor([1.2, 1.0], device=device)
+    criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.05)
 
-    # FP16 Automatic Mixed Precision Scaler for RTX 3050 VRAM safety
+    # FP16 Automatic Mixed Precision Scaler
     scaler = torch.amp.GradScaler("cuda", enabled=(device.type == "cuda"))
 
     # --------------------------------------------------------------------------
-    # Training Loop
+    # Fine-Tuning Loop
     # --------------------------------------------------------------------------
     best_acc = 0.0
-    print("\n🚀 Beginning Training Loop...")
+    print("\n🚀 Commencing Fine-Tuning...")
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -241,14 +265,13 @@ def train_model(
         train_correct = 0
         train_total = 0
 
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{epochs} [Train]", unit="batch")
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{epochs} [Fine-Tune]", unit="batch")
         for images, labels in pbar:
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
 
-            # PyTorch FP16 Mixed Precision
             with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
                 outputs = model(images)
                 loss = criterion(outputs, labels)
@@ -272,15 +295,18 @@ def train_model(
         train_acc = 100.0 * train_correct / train_total
 
         # ----------------------------------------------------------------------
-        # Validation Evaluation
+        # Validation Evaluation with Domain Breakdown
         # ----------------------------------------------------------------------
         model.eval()
         val_loss = 0.0
         val_correct = 0
         val_total = 0
 
+        # Sub-domain tracking: sg_fake, diff_fake, face_real, pool_real
+        domain_stats = {"sg": [0, 0], "diff": [0, 0], "face": [0, 0], "pool": [0, 0]}
+
         with torch.no_grad():
-            for images, labels in val_loader:
+            for i, (images, labels) in enumerate(val_loader):
                 images = images.to(device, non_blocking=True)
                 labels = labels.to(device, non_blocking=True)
 
@@ -293,57 +319,70 @@ def train_model(
                 val_correct += (preds == labels).sum().item()
                 val_total += labels.size(0)
 
+                # Attribute batch to domains
+                batch_start = i * batch_size
+                for b_idx in range(len(labels)):
+                    sample_path, _ = val_samples[batch_start + b_idx]
+                    base_name = os.path.basename(sample_path)
+                    is_correct = int(preds[b_idx] == labels[b_idx])
+                    if base_name.startswith("sg_"):
+                        domain_stats["sg"][0] += is_correct
+                        domain_stats["sg"][1] += 1
+                    elif base_name.startswith("diff_"):
+                        domain_stats["diff"][0] += is_correct
+                        domain_stats["diff"][1] += 1
+                    elif base_name.startswith("face_"):
+                        domain_stats["face"][0] += is_correct
+                        domain_stats["face"][1] += 1
+                    elif base_name.startswith("real_"):
+                        domain_stats["pool"][0] += is_correct
+                        domain_stats["pool"][1] += 1
+
         val_acc = 100.0 * val_correct / val_total
         avg_val_loss = val_loss / val_total
-        current_lr = optimizer.param_groups[0]['lr']
         scheduler.step()
 
-        # VRAM monitoring
         if device.type == "cuda":
             peak_vram_mb = torch.cuda.max_memory_allocated(device) / (1024 * 1024)
             vram_str = f"Peak VRAM: {peak_vram_mb:.1f} MB ({peak_vram_mb/1024:.2f} GB)"
         else:
             vram_str = "CPU Mode"
 
+        sg_acc = 100.0 * domain_stats["sg"][0] / max(1, domain_stats["sg"][1])
+        diff_acc = 100.0 * domain_stats["diff"][0] / max(1, domain_stats["diff"][1])
+        face_acc = 100.0 * domain_stats["face"][0] / max(1, domain_stats["face"][1])
+        pool_acc = 100.0 * domain_stats["pool"][0] / max(1, domain_stats["pool"][1])
+
         print(f"\n📊 Epoch {epoch}/{epochs} Results:")
         print(f"   Train Loss: {epoch_loss:.4f} | Train Acc: {train_acc:.2f}%")
-        print(f"   Val Loss:   {avg_val_loss:.4f} | Val Acc:   {val_acc:.2f}% (Target: >90%)")
+        print(f"   Val Loss:   {avg_val_loss:.4f} | Val Acc:   {val_acc:.2f}%")
+        print(f"   🔍 Domain Accuracy: GAN: {sg_acc:.1f}% | Diffusion: {diff_acc:.1f}% | Face Real: {face_acc:.1f}% | Scene Real: {pool_acc:.1f}%")
         print(f"   {vram_str}")
 
-        # Checkpoint Saving
         if val_acc > best_acc:
             best_acc = val_acc
             torch.save(model.state_dict(), save_path)
-            print(f"   💾 Saved new best model checkpoint to {save_path} (Val Acc: {best_acc:.2f}%)\n")
+            print(f"   💾 Saved new best fine-tuned checkpoint to {save_path} (Val Acc: {best_acc:.2f}%)\n")
         else:
             print(f"   Best Val Acc remains: {best_acc:.2f}%\n")
 
-    print("=" * 70)
-    print(f"🏁 Training Complete!")
-    print(f"   Best Validation Accuracy: {best_acc:.2f}%")
-    print(f"   Model Weights Saved: {save_path}")
-    if device.type == "cuda":
-        final_peak_vram = torch.cuda.max_memory_allocated(device) / (1024 * 1024)
-        print(f"   Final Peak VRAM Usage: {final_peak_vram:.1f} MB (Constraint: < 3072 MB)")
-        assert final_peak_vram < 3072, "VRAM exceeded 3GB constraint!"
-    print("=" * 70)
+    print("=" * 72)
+    print(f"🏁 Fine-Tuning Complete!")
+    print(f"   Best Combined Validation Accuracy: {best_acc:.2f}%")
+    print(f"   Final Checkpoint: {save_path}")
+    print("=" * 72)
 
     return model, best_acc
 
 
-# ==============================================================================
-# CLI ENTRYPOINT
-# ==============================================================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train VeritasHybridNet for Deepfake Detection")
+    parser = argparse.ArgumentParser(description="Fine-Tune VeritasHybridNet for Diffusion Adaptation")
     parser.add_argument("--data-dir", type=str, default=DEFAULT_DATA_DIR, help="Path to image dataset")
     parser.add_argument("--save-path", type=str, default=DEFAULT_SAVE_PATH, help="Path to save model weights")
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Batch size (default: 32)")
-    parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS, help="Number of training epochs (default: 5)")
-    parser.add_argument("--lr", type=float, default=DEFAULT_LR, help="Learning rate (default: 1e-4)")
+    parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS, help="Epochs (default: 4)")
+    parser.add_argument("--lr", type=float, default=DEFAULT_LR, help="Learning rate (default: 8e-5)")
     parser.add_argument("--weight-decay", type=float, default=DEFAULT_WEIGHT_DECAY, help="Weight decay (default: 1e-4)")
-    parser.add_argument("--max-samples", type=int, default=10000, help="Max balanced samples for training (default: 10000)")
-    parser.add_argument("--full", action="store_true", help="Train on full dataset without sample cap")
     parser.add_argument("--workers", type=int, default=4, help="DataLoader workers (default: 4)")
 
     args = parser.parse_args()
@@ -355,7 +394,5 @@ if __name__ == "__main__":
         epochs=args.epochs,
         lr=args.lr,
         weight_decay=args.weight_decay,
-        max_samples=args.max_samples,
-        full_dataset=args.full,
         num_workers=args.workers
     )

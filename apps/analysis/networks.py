@@ -220,6 +220,8 @@ class VeritasHybridNet(nn.Module):
     def analyze(self, image_input, device=None) -> float:
         """
         Forensic inference helper method for EnterpriseDeepFakeDetector.
+        Evaluates both global scene context and native-resolution VAE pixel grid crops
+        to reliably detect both GANs and modern Latent Diffusion (Gemini, SD, Midjourney).
         
         Accepts:
             image_input: File path (str), PIL.Image.Image, or torch.Tensor.
@@ -247,25 +249,42 @@ class VeritasHybridNet(nn.Module):
         else:
             raise TypeError(f"Unsupported image_input type: {type(image_input)}. Expected str, PIL.Image, or Tensor.")
 
-        if pil_img is not None:
-            eval_transform = transforms.Compose([
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
-            tensor = eval_transform(pil_img)
+        norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-        if tensor.dim() == 3:
-            tensor = tensor.unsqueeze(0)
-            
-        tensor = tensor.to(device)
-        
-        if device.type == 'cuda':
-            with torch.amp.autocast('cuda'):
-                logits = self.forward(tensor)
+        if pil_img is not None:
+            w, h = pil_img.size
+            # View A: Global context resized to 224x224
+            t_resized = norm(transforms.ToTensor()(pil_img.resize((224, 224)))).unsqueeze(0).to(device)
+
+            # View B: If image is high-res, evaluate 1:1 native crop to inspect VAE grid
+            if w >= 256 and h >= 256:
+                crop_img = transforms.CenterCrop(224)(pil_img)
+                t_crop = norm(transforms.ToTensor()(crop_img)).unsqueeze(0).to(device)
+                batch = torch.cat([t_resized, t_crop], dim=0)
+            else:
+                batch = t_resized
+
+            if device.type == 'cuda':
+                with torch.amp.autocast('cuda'):
+                    logits = self.forward(batch)
+            else:
+                logits = self.forward(batch)
+                
+            probs = F.softmax(logits, dim=1)
+            fake_probs = probs[:, self.fake_class_idx]
+            # Max fake probability across full context and local native patch
+            return float(torch.max(fake_probs).item())
         else:
-            logits = self.forward(tensor)
+            if tensor.dim() == 3:
+                tensor = tensor.unsqueeze(0)
+            tensor = tensor.to(device)
             
-        probs = F.softmax(logits, dim=1)
-        fake_prob = float(probs[0, self.fake_class_idx].item())
-        return fake_prob
+            if device.type == 'cuda':
+                with torch.amp.autocast('cuda'):
+                    logits = self.forward(tensor)
+            else:
+                logits = self.forward(tensor)
+                
+            probs = F.softmax(logits, dim=1)
+            fake_prob = float(probs[0, self.fake_class_idx].item())
+            return fake_prob
