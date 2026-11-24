@@ -107,35 +107,80 @@ At the heart of the detection pipeline is **`VeritasHybridNet`**, a dual-stream 
 
 ## 📊 Detection Benchmarks & Performance
 
-`VeritasHybridNet` was trained on a balanced 16,000-image dataset (StyleGAN, Midjourney, Stable Diffusion, FFHQ human portraits, and real-world scenes) using FP16 mixed precision on an **NVIDIA GeForce RTX 3050 (6GB VRAM)**:
+`VeritasHybridNet` was trained on a balanced 16,000-image dataset (StyleGAN, Midjourney, Stable Diffusion, FFHQ human portraits, and real-world scenes) using FP16 mixed precision on an **NVIDIA GeForce RTX 3050 (6GB VRAM)** (**Peak VRAM:** `1.51 GB`). Three model checkpoints are maintained and evaluated side-by-side (`0.50` decision threshold):
+- **`v1` (`veritas_hybrid_backup.pth`):** Initial 16k-trained model optimized on clean in-domain distributions.
+- **`v3` (`veritas_hybrid_v3.pth`, active `veritas_hybrid.pth`):** OOD-refined model balancing in-domain validation accuracy with heavy-compression & real-photo specificity.
+- **`v4` (`veritas_hybrid_v4.pth`):** Extended 16.5k-image fine-tuned model incorporating multi-scale resizing, heavy JPEG/WebP compression (`Q=10–95`), and diverse stock/web photography.
 
-| Generative Engine / Media Type | Sample Evaluation | Deepfake Probability (`v3`) | Detection Verdict |
-| :--- | :--- | :---: | :---: |
-| **Google Gemini / Imagen** | `Gemini_Generated_Image_3jm47z.png` | **94.63%** | 🚨 **AI GENERATED** |
-| **Google Gemini (Variant 2)** | `Gemini_Generated_Image_Hl2OIc.png` | **94.63%** | 🚨 **AI GENERATED** |
-| **Stable Diffusion (SDXL / SD 1.5)** | `diff_sd_00500.png` | **96.24%** | 🚨 **AI GENERATED** |
-| **Midjourney (v5 / v6)** | `diff_mj_00000.png` | **85.74%** | 🚨 **AI GENERATED** |
-| **StyleGAN / ProGAN (Legacy)** | `sg_001DDU0NI4.jpg` | **96.53%** | 🚨 **AI GENERATED** |
-| **Authentic Human Face** | `face_00000.jpg` | **37.48%** | 🛡️ **AUTHENTIC** |
-| **Authentic General Scene** | `real_00000.JPEG` | **42.33%** | 🛡️ **AUTHENTIC** |
+---
 
-- **Combined Validation Accuracy (`v3`):** **97.66%** (`3,125 / 3,200` held-out samples)
-- **GAN Accuracy:** **99.38%** (`795 / 800`) | **Diffusion Accuracy:** **95.88%** (`767 / 800`)
-- **Real Specificity:** **99.88%** (Faces, `799 / 800`) | **95.50%** (General Scenes, `764 / 800`)
-- **Peak Hardware Footprint:** **1.51 GB VRAM** (Operating well within consumer 4GB/6GB GPU limits).
+### 1. 305-Image Broad Out-of-Distribution (OOD) Benchmark (`v1` vs. `v3` vs. `v4`)
 
-### 🧪 Out-of-Distribution Stress Test (46 Unseen Real-World Samples)
+Evaluates true real-world generalization across **305 completely unseen images** (zero overlap with training or validation sets), including unseen generators (DALL-E 3, HuggingFace AI-Art), natural camera photography (`Flickr30k`), retouched stock photos (`Unsplash/Picsum`), multi-resolution scaling (`128×128` to `2560×1440`), extreme JPEG compression (`Q=25`/`Q=10`), and post-generation edits:
 
-To measure true generalization beyond the validation split, `EnterpriseDeepFakeDetector` was evaluated against **46 out-of-distribution samples** across unseen generators (DALL-E 3, EXIF-stripped Google Gemini), diverse real-world photography (`Flickr30k`, `Unsplash/Picsum`), multi-resolution scaling, extreme JPEG compression (`Q=25` / `Q=10`), and post-generation edits (`0.50` decision threshold). Following targeted OOD fine-tuning (`v3`, with symmetric heavy-compression augmentation and rebalanced Real-class weighting), overall stress-test accuracy improved from **84.78%** to **93.5%**:
+| Category | Samples | `v1` (Original) | `v3` (Active) | `v4` (Extended) |
+| :--- | :---: | :---: | :---: | :---: |
+| **1. Unseen Gen: DALL-E 3** | `50` | `31/50` (`62.0%`) | `48/50` (`96.0%`) | **`48/50` (`96.0%`)** |
+| **2. Unseen Gen: AI-Art** | `40` | **`36/40` (`90.0%`)** | `33/40` (`82.5%`) | **`36/40` (`90.0%`)** |
+| **3. Real Camera Photos (`Flickr30k`)** | `80` | `66/80` (`82.5%`) | **`79/80` (`98.8%`)** | **`79/80` (`98.8%`)** |
+| **4. Real Stock Photos (`Unsplash/Picsum`)** | `40` | `7/40` (`17.5%`) | `22/40` (`55.0%`) | **`29/40` (`72.5%`)** |
+| **5. Multi-Resolution Scaling** | `30` | `18/30` (`60.0%`) | `24/30` (`80.0%`) | **`25/30` (`83.3%`)** |
+| **6. Heavy JPEG Compression (`Q=25`/`Q=10`)** | `40` | `27/40` (`67.5%`) | `37/40` (`92.5%`) | **`39/40` (`97.5%`)** |
+| **7. Edited After Generation** | `25` | `17/25` (`68.0%`) | **`24/25` (`96.0%`)** | **`24/25` (`96.0%`)** |
+| **OVERALL (`305` images)** | `305` | `202/305` (`66.2%`) | `267/305` (`87.5%`) | **`280/305` (`91.8%`)** |
 
-| Stress-Test Category | Samples Tested | Baseline (`v1`) | Fine-Tuned (`v3`) | Key Findings (`v3`) |
-| :--- | :--- | :---: | :---: | :--- |
-| **1. Completely Unseen Generators** | DALL-E 3 (8) + Gemini w/ & w/o EXIF (2) | `10 / 10` (`100.0%`) | **10 / 10 (100.0%)** | Zero-shot detection on DALL-E 3 & EXIF-stripped Gemini (`94.63%` on `v3`). |
-| **2. Real Photographs** | `Flickr30k` diverse environments (10) | `9 / 10` (`90.0%`) | **10 / 10 (100.0%)** | Eliminated false positives across unseen camera environments. |
-| **3. Different Sources & Resolutions** | `Unsplash/Picsum` Real + Resized DALL-E 3 (`256×256` to `2560×1440`) | `6 / 8` (`75.0%`) | **7 / 8 (87.5%)** | Resized DALL-E 3 **4/4**; `Unsplash` real photos improved to **3/4**. |
-| **4. Heavy JPEG Compression** | Real & DALL-E 3 at JPEG `Q=25` and `Q=10` | `8 / 12` (`66.7%`) | **10 / 12 (83.3%)** | Caught **6/6** heavily compressed DALL-E 3 fakes (`94.1%`–`98.4%` Fake). |
-| **5. Edited After Generation** | Crop (70%), Contrast/Color, Blur, Sharpen, Border Pad, WebP→JPG | `6 / 6` (`100.0%`) | **6 / 6 (100.0%)** | Full resilience across all 6 post-processing edits (`95.2%`–`98.6%` Fake). |
-| **Overall Stress-Test Accuracy** | **Combined Out-of-Distribution Suite** | `39 / 46` (`84.8%`) | **43 / 46 (93.5%)** | **+8.7%** gain in real-world OOD generalization without losing in-domain accuracy. |
+> **Explanation:** `v1` overfits to clean training distributions and struggles heavily outside them (`62.0%` on DALL-E 3, `17.5%` on retouched Unsplash stock photos, and `67.5%` under heavy JPEG compression). `v3` jumps `+21.3%` overall (`87.5%`), and `v4` pushes real-world OOD accuracy to **`91.8%`** (`88.82%` Fake precision, `95.33%` Fake recall, `91.96%` F1, `88.39%` Real specificity).
+
+---
+
+### 2. 46-Image Targeted Stress Test (`v1` vs. `v3` vs. `v4`)
+
+A controlled stress-test suite verifying EXIF-stripped zero-shot Gemini detection, diverse camera environments, resolution extremes, heavy JPEG compression, and 6 post-generation image edits:
+
+| Stress-Test Category | Samples | `v1` (Original) | `v3` (Active) | `v4` (Extended) |
+| :--- | :---: | :---: | :---: | :---: |
+| **1. Unseen Generators** *(DALL-E 3 + Gemini w/ & w/o EXIF)* | `10` | `10/10` (`100.0%`) | `10/10` (`100.0%`) | **`10/10` (`100.0%`)** |
+| **2. Real Cameras & Environments** *(`Flickr30k`)* | `10` | `9/10` (`90.0%`) | `10/10` (`100.0%`) | **`10/10` (`100.0%`)** |
+| **3. Diff Sources & Resolutions** *(`Unsplash` + Resized AI)* | `8` | `6/8` (`75.0%`) | `7/8` (`87.5%`) | **`8/8` (`100.0%`)** |
+| **4. Heavy JPEG Compression** *(`Q=25` & `Q=10`)* | `12` | `8/12` (`66.7%`) | `10/12` (`83.3%`) | **`11/12` (`91.7%`)** |
+| **5. Edited After Generation** *(Crop, Color, Blur, Sharpen, WebP→JPG)* | `6` | `6/6` (`100.0%`) | `6/6` (`100.0%`) | **`6/6` (`100.0%`)** |
+| **OVERALL (`46` images)** | `46` | `39/46` (`84.8%`) | `43/46` (`93.5%`) | **`45/46` (`97.8%`)** |
+
+> **Explanation:** Demonstrates progressive robustness gains across adversarial real-world conditions—raising multi-source/resolution accuracy from `75.0%` to **`100.0%`** and heavy compression accuracy from `66.7%` to **`91.7%`**.
+
+---
+
+### 3. 3,200-Image Held-Out Validation Split (`train.py`)
+
+Evaluates single-image (`224×224`) classification accuracy on the deterministic 20% held-out validation split (`800` samples per sub-domain):
+
+| Validation Metric (`3,200` Held-Out Images) | `v1` (Original) | `v3` (Active) | `v4` (Extended) |
+| :--- | :---: | :---: | :---: |
+| **Combined Validation Accuracy** | `97.62%` | **`97.66%`** | `97.50%` |
+| **GAN (StyleGAN)** (`800`) | **`99.8%`** | `99.38%` | `99.62%` |
+| **Diffusion (SD / Midjourney)** (`800`) | **`97.6%`** | `95.88%` | `94.38%` |
+| **Real Faces (FFHQ)** (`800`) | `99.2%` | `99.88%` | **`99.88%`** |
+| **Real Scenes** (`800`) | `93.9%` | `95.50%` | **`96.12%`** |
+
+> **Explanation:** Highlights the **in-domain vs. OOD trade-off**: `v3` achieves the highest combined validation accuracy (`97.66%`), while `v4` achieves the highest Real Scene specificity (`96.12%`) at the cost of a small `-1.5%` to `-3.2%` dip on clean in-domain Diffusion validation samples due to heavy compression/blur regularization.
+
+---
+
+### 4. Showcase Sample Evaluations (`v1` vs. `v3` vs. `v4`)
+
+Raw pipeline probability scores (`EnterpriseDeepFakeDetector.analyze()`, threshold `>= 50%` = AI Generated) on representative showcase assets:
+
+| Generative Engine / Media Type | Sample File | `v1` | `v3` (Active) | `v4` | Verdict |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Google Gemini / Imagen** | `Gemini_Generated_Image_3jm47z.png` | `97.46%` | `94.63%` | `75.83%` | 🚨 **AI GENERATED** |
+| **Google Gemini (Variant 2)** | `Gemini_Generated_Image_Hl2OIc.png` | `97.46%` | `94.63%` | `75.83%` | 🚨 **AI GENERATED** |
+| **Stable Diffusion (SDXL / SD 1.5)** | `diff_sd_00500.png` | `98.58%` | `96.24%` | `96.63%` | 🚨 **AI GENERATED** |
+| **Midjourney (v5 / v6)** | `diff_mj_00000.png` | `96.09%` | `85.74%` | `76.03%` | 🚨 **AI GENERATED** |
+| **StyleGAN / ProGAN (Legacy)** | `sg_001DDU0NI4.jpg` | `98.44%` | `96.53%` | `98.05%` | 🚨 **AI GENERATED** |
+| **Authentic Human Face** | `face_00000.jpg` | `3.23%` | `37.48%` | `18.73%` | 🛡️ **AUTHENTIC** |
+| **Authentic General Scene** | `real_00000.JPEG` | `8.20%` | `42.33%` | `31.72%` | 🛡️ **AUTHENTIC** |
+
+> **Explanation:** All three checkpoints classify every showcase sample correctly. `v1` produces the sharpest probability margins on clean showcase images (`96%–98.6%` Fake vs. `3.2%–8.2%` Real), `v3` maintains strong `85.7%–96.5%` Fake confidence with high validation accuracy (`97.66%`), and `v4` produces softer confidence on clean samples (`75.8%–98.1%`) in exchange for superior real-world resilience (`91.8%` on 305 OOD images).
 
 ---
 
