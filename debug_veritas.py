@@ -4,8 +4,9 @@ from PIL import Image, ImageDraw, ImageFont
 import sys
 import os
 
-# CHANGE THIS to your image path
-TEST_IMAGE = r"/mnt/c/Users/Lenovo/Desktop/random codes/Design Thinking and Innovation/Images/test2.jpg"
+# Default sample image fallback
+DEFAULT_SAMPLE = "storage/quarantine/Gemini_Generated_Image_3jm47z3jm47z3jm4.png"
+TEST_IMAGE = DEFAULT_SAMPLE if os.path.exists(DEFAULT_SAMPLE) else r"/mnt/c/Users/Lenovo/Desktop/random codes/Design Thinking and Innovation/Images/test2.jpg"
 
 def debug_image(image_path):
     print(f"🔍 Debugging: {image_path}")

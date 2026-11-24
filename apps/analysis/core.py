@@ -49,6 +49,10 @@ class EnterpriseDeepFakeDetector:
         new_y2 = min(height, int(cy + new_side / 2))
         return img.crop((new_x1, new_y1, new_x2, new_y2))
 
+    def _predict_single(self, img):
+        """Helper for single-crop or single-tensor prediction."""
+        return self.model.analyze(img, device=self.device)
+
     def analyze(self, image_path):
         try:
             full_image = Image.open(image_path).convert('RGB')
