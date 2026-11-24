@@ -109,15 +109,15 @@ At the heart of the detection pipeline is **`VeritasHybridNet`**, a dual-stream 
 
 `VeritasHybridNet` was trained on a balanced 16,000-image dataset (StyleGAN, Midjourney, Stable Diffusion, FFHQ human portraits, and real-world scenes) using FP16 mixed precision on an **NVIDIA GeForce RTX 3050 (6GB VRAM)**:
 
-| Generative Engine / Media Type | Sample Evaluation | Deepfake Probability | Detection Verdict |
+| Generative Engine / Media Type | Sample Evaluation | Deepfake Probability (`v3`) | Detection Verdict |
 | :--- | :--- | :---: | :---: |
-| **Google Gemini / Imagen** | `Gemini_Generated_Image_3jm47z.png` | **97.46%** | 🚨 **AI GENERATED** |
-| **Google Gemini (Variant 2)** | `Gemini_Generated_Image_Hl2OIc.png` | **97.46%** | 🚨 **AI GENERATED** |
-| **Stable Diffusion (SDXL / SD 1.5)** | `diff_sd_00500.png` | **98.58%** | 🚨 **AI GENERATED** |
-| **Midjourney (v5 / v6)** | `diff_mj_00000.png` | **96.09%** | 🚨 **AI GENERATED** |
-| **StyleGAN / ProGAN (Legacy)** | `sg_001DDU0NI4.jpg` | **98.44%** | 🚨 **AI GENERATED** |
-| **Authentic Human Face** | `face_00000.jpg` | **3.23%** | 🛡️ **AUTHENTIC** |
-| **Authentic General Scene** | `real_00000.JPEG` | **8.20%** | 🛡️ **AUTHENTIC** |
+| **Google Gemini / Imagen** | `Gemini_Generated_Image_3jm47z.png` | **94.63%** | 🚨 **AI GENERATED** |
+| **Google Gemini (Variant 2)** | `Gemini_Generated_Image_Hl2OIc.png` | **94.63%** | 🚨 **AI GENERATED** |
+| **Stable Diffusion (SDXL / SD 1.5)** | `diff_sd_00500.png` | **96.24%** | 🚨 **AI GENERATED** |
+| **Midjourney (v5 / v6)** | `diff_mj_00000.png` | **85.74%** | 🚨 **AI GENERATED** |
+| **StyleGAN / ProGAN (Legacy)** | `sg_001DDU0NI4.jpg` | **96.53%** | 🚨 **AI GENERATED** |
+| **Authentic Human Face** | `face_00000.jpg` | **37.48%** | 🛡️ **AUTHENTIC** |
+| **Authentic General Scene** | `real_00000.JPEG` | **42.33%** | 🛡️ **AUTHENTIC** |
 
 - **Combined Validation Accuracy (`v3`):** **97.66%** (`3,125 / 3,200` held-out samples)
 - **GAN Accuracy:** **99.38%** (`795 / 800`) | **Diffusion Accuracy:** **95.88%** (`767 / 800`)
@@ -130,7 +130,7 @@ To measure true generalization beyond the validation split, `EnterpriseDeepFakeD
 
 | Stress-Test Category | Samples Tested | Baseline (`v1`) | Fine-Tuned (`v3`) | Key Findings (`v3`) |
 | :--- | :--- | :---: | :---: | :--- |
-| **1. Completely Unseen Generators** | DALL-E 3 (8) + Gemini w/ & w/o EXIF (2) | `10 / 10` (`100.0%`) | **10 / 10 (100.0%)** | Zero-shot detection on DALL-E 3 & EXIF-stripped Gemini (`98.39%` on `v3`). |
+| **1. Completely Unseen Generators** | DALL-E 3 (8) + Gemini w/ & w/o EXIF (2) | `10 / 10` (`100.0%`) | **10 / 10 (100.0%)** | Zero-shot detection on DALL-E 3 & EXIF-stripped Gemini (`94.63%` on `v3`). |
 | **2. Real Photographs** | `Flickr30k` diverse environments (10) | `9 / 10` (`90.0%`) | **10 / 10 (100.0%)** | Eliminated false positives across unseen camera environments. |
 | **3. Different Sources & Resolutions** | `Unsplash/Picsum` Real + Resized DALL-E 3 (`256×256` to `2560×1440`) | `6 / 8` (`75.0%`) | **7 / 8 (87.5%)** | Resized DALL-E 3 **4/4**; `Unsplash` real photos improved to **3/4**. |
 | **4. Heavy JPEG Compression** | Real & DALL-E 3 at JPEG `Q=25` and `Q=10` | `8 / 12` (`66.7%`) | **10 / 12 (83.3%)** | Caught **6/6** heavily compressed DALL-E 3 fakes (`94.1%`–`98.4%` Fake). |
