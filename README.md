@@ -108,9 +108,9 @@ At the heart of the detection pipeline is **`VeritasHybridNet`**, a dual-stream 
 ## 📊 Detection Benchmarks & Performance
 
 `VeritasHybridNet` was trained on a balanced 16,000-image dataset (StyleGAN, Midjourney, Stable Diffusion, FFHQ human portraits, and real-world scenes) using FP16 mixed precision on an **NVIDIA GeForce RTX 3050 (6GB VRAM)** (**Peak VRAM:** `1.51 GB`). Three model checkpoints are maintained and evaluated side-by-side (`0.50` decision threshold):
-- **`v1` (`veritas_hybrid_backup.pth`):** Initial 16k-trained model optimized on clean in-domain distributions.
-- **`v3` (`veritas_hybrid_v3.pth`, active `veritas_hybrid.pth`):** OOD-refined model balancing in-domain validation accuracy with heavy-compression & real-photo specificity.
-- **`v4` (`veritas_hybrid_v4.pth`):** Extended 16.5k-image fine-tuned model incorporating multi-scale resizing, heavy JPEG/WebP compression (`Q=10–95`), and diverse stock/web photography.
+- **`v1` (`veritas_hybrid_backup.pth`):** Initial 16k-trained model optimized on clean in-domain distributions (preserved backup).
+- **`v3` (`veritas_hybrid_v3.pth`):** OOD-refined model balancing in-domain validation accuracy with heavy-compression & real-photo specificity (preserved backup).
+- **`v4` (Active `veritas_hybrid.pth`):** Extended 16.5k-image fine-tuned model incorporating multi-scale resizing, heavy JPEG/WebP compression (`Q=10–95`), and diverse stock/web photography.
 
 ---
 
@@ -118,7 +118,7 @@ At the heart of the detection pipeline is **`VeritasHybridNet`**, a dual-stream 
 
 Evaluates true real-world generalization across **305 completely unseen images** (zero overlap with training or validation sets), including unseen generators (DALL-E 3, HuggingFace AI-Art), natural camera photography (`Flickr30k`), retouched stock photos (`Unsplash/Picsum`), multi-resolution scaling (`128×128` to `2560×1440`), extreme JPEG compression (`Q=25`/`Q=10`), and post-generation edits:
 
-| Category | Samples | `v1` (Original) | `v3` (Active) | `v4` (Extended) |
+| Category | Samples | `v1` (Original) | `v3` (Backup) | `v4` (Active) |
 | :--- | :---: | :---: | :---: | :---: |
 | **1. Unseen Gen: DALL-E 3** | `50` | `31/50` (`62.0%`) | `48/50` (`96.0%`) | **`48/50` (`96.0%`)** |
 | **2. Unseen Gen: AI-Art** | `40` | **`36/40` (`90.0%`)** | `33/40` (`82.5%`) | **`36/40` (`90.0%`)** |
@@ -137,7 +137,7 @@ Evaluates true real-world generalization across **305 completely unseen images**
 
 A controlled stress-test suite verifying EXIF-stripped zero-shot Gemini detection, diverse camera environments, resolution extremes, heavy JPEG compression, and 6 post-generation image edits:
 
-| Stress-Test Category | Samples | `v1` (Original) | `v3` (Active) | `v4` (Extended) |
+| Stress-Test Category | Samples | `v1` (Original) | `v3` (Backup) | `v4` (Active) |
 | :--- | :---: | :---: | :---: | :---: |
 | **1. Unseen Generators** *(DALL-E 3 + Gemini w/ & w/o EXIF)* | `10` | `10/10` (`100.0%`) | `10/10` (`100.0%`) | **`10/10` (`100.0%`)** |
 | **2. Real Cameras & Environments** *(`Flickr30k`)* | `10` | `9/10` (`90.0%`) | `10/10` (`100.0%`) | **`10/10` (`100.0%`)** |
@@ -154,7 +154,7 @@ A controlled stress-test suite verifying EXIF-stripped zero-shot Gemini detectio
 
 Evaluates single-image (`224×224`) classification accuracy on the deterministic 20% held-out validation split (`800` samples per sub-domain):
 
-| Validation Metric (`3,200` Held-Out Images) | `v1` (Original) | `v3` (Active) | `v4` (Extended) |
+| Validation Metric (`3,200` Held-Out Images) | `v1` (Original) | `v3` (Backup) | `v4` (Active) |
 | :--- | :---: | :---: | :---: |
 | **Combined Validation Accuracy** | `97.62%` | **`97.66%`** | `97.50%` |
 | **GAN (StyleGAN)** (`800`) | **`99.8%`** | `99.38%` | `99.62%` |
@@ -170,7 +170,7 @@ Evaluates single-image (`224×224`) classification accuracy on the deterministic
 
 Raw pipeline probability scores (`EnterpriseDeepFakeDetector.analyze()`, threshold `>= 50%` = AI Generated) on representative showcase assets:
 
-| Generative Engine / Media Type | Sample File | `v1` | `v3` (Active) | `v4` | Verdict |
+| Generative Engine / Media Type | Sample File | `v1` | `v3` | `v4` (Active) | Verdict |
 | :--- | :--- | :---: | :---: | :---: | :---: |
 | **Google Gemini / Imagen** | `Gemini_Generated_Image_3jm47z.png` | `97.46%` | `94.63%` | `75.83%` | 🚨 **AI GENERATED** |
 | **Google Gemini (Variant 2)** | `Gemini_Generated_Image_Hl2OIc.png` | `97.46%` | `94.63%` | `75.83%` | 🚨 **AI GENERATED** |
