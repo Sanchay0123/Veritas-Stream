@@ -124,6 +124,19 @@ At the heart of the detection pipeline is **`VeritasHybridNet`**, a dual-stream 
 - **Real Specificity:** **99.2%** (Faces) | **93.9%** (General Scenes)
 - **Peak Hardware Footprint:** **1.51 GB VRAM** (Operating well within consumer 4GB/6GB GPU limits).
 
+### 🧪 Out-of-Distribution Stress Test (46 Unseen Real-World Samples)
+
+To measure true generalization beyond the validation split, `EnterpriseDeepFakeDetector` was evaluated (without modifying any model weights) against **46 out-of-distribution samples** across unseen generators (DALL-E 3, EXIF-stripped Google Gemini), diverse real-world photography (`Flickr30k`, `Unsplash/Picsum`), multi-resolution scaling, extreme JPEG compression, and post-generation edits (`0.50` decision threshold):
+
+| Stress-Test Category | Samples Tested | Correct / Total | Accuracy | Key Findings |
+| :--- | :--- | :---: | :---: | :--- |
+| **1. Completely Unseen Generators** | DALL-E 3 (8) + Gemini w/ & w/o EXIF (2) | **10 / 10** | **100.00%** | Strong zero-shot transfer (`80.64%`–`98.63%` Fake); Gemini scored `97.53%` even with EXIF stripped. |
+| **2. Real Photographs** | `Flickr30k` diverse environments (10) | **9 / 10** | **90.00%** | 1 borderline false positive (`50.70%`); real scenes show tighter margins (`41%`–`49.8%`). |
+| **3. Different Sources & Resolutions** | `Unsplash/Picsum` Real + Resized DALL-E 3 (`256×256` to `2560×1440`) | **6 / 8** | **75.00%** | Resized DALL-E 3 detected **4/4** (`70.51%`–`96.53%`); real Unsplash had **2/4** false positives (`1280×720`, `1920×1080`). |
+| **4. Heavy JPEG Compression** | Real & DALL-E 3 at JPEG `Q=25` and `Q=10` | **8 / 12** | **66.67%** | Extreme `Q=10`/`Q=25` compression attenuates high-frequency NPR/FFT traces (3 fake misses, 1 real FP). |
+| **5. Edited After Generation** | Crop (70%), Contrast/Color, Blur, Sharpen, Border Pad, WebP→JPG | **6 / 6** | **100.00%** | High resilience across all 6 post-processing edits (`87.18%`–`98.24%` Fake). |
+| **Overall Stress-Test Accuracy** | **Combined Out-of-Distribution Suite** | **39 / 46** | **84.78%** | High AI recall across unseen generators/edits; extreme JPEG compression and OOD real scenes remain primary challenges. |
+
 ---
 
 ## 🔏 Cryptographic Chain of Custody & The Tripwire
